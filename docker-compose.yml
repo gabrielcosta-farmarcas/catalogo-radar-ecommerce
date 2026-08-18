@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: cadastro-produtos-db
+    environment:
+      POSTGRES_USER: cadastro
+      POSTGRES_PASSWORD: cadastro
+      POSTGRES_DB: cadastro_produtos
+    ports:
+      - "5433:5432"
+    volumes:
+      - cadastro_produtos_data:/var/lib/postgresql/data
+
+volumes:
+  cadastro_produtos_data:
