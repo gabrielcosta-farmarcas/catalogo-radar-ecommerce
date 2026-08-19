@@ -1,7 +1,7 @@
 """
 Enriquece eans_estoque_sem_venda_12m.xlsx em 5 camadas, da mais barata pra
 mais cara:
-0. Tabela `medicamentos` (base oficial da ANVISA/CMED, carregada por
+0. Tabela `anvisa_medicamentos` (base oficial da ANVISA/CMED, carregada por
    carregar_cmed.py) - se o EAN está lá, o produto É medicamento com certeza
    (fonte oficial, sem ambiguidade) e os dados vêm direto da tabela; só
    formatação leve (sem busca, sem segunda verificação de tarja/registro_ms).

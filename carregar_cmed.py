@@ -1,6 +1,6 @@
 """
-Script pra carregar a tabela CMED (cmed_carga.xlsx) na tabela `medicamentos`
-do Postgres.
+Script pra carregar a tabela CMED (cmed_carga.xlsx) na tabela
+`anvisa_medicamentos` do Postgres.
 
 Uso:
     python carregar_cmed.py criar-tabela
@@ -18,7 +18,7 @@ from cmed import normalizar_ean
 from db import conectar
 
 SCHEMA_SQL = """
-CREATE TABLE IF NOT EXISTS medicamentos (
+CREATE TABLE IF NOT EXISTS anvisa_medicamentos (
     codigo_ggrem        TEXT PRIMARY KEY,
     substancia          TEXT NOT NULL,
     cnpj                TEXT NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS medicamentos (
     criado_em           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_medicamentos_ean_1 ON medicamentos (ean_1);
+CREATE INDEX IF NOT EXISTS idx_anvisa_medicamentos_ean_1 ON anvisa_medicamentos (ean_1);
 """
 
 
@@ -44,7 +44,7 @@ def criar_tabela():
         with conn.cursor() as cur:
             cur.execute(SCHEMA_SQL)
         conn.commit()
-    print("Tabela criada/confirmada: medicamentos.")
+    print("Tabela criada/confirmada: anvisa_medicamentos.")
 
 
 def _limpar_texto(valor):
@@ -92,8 +92,9 @@ def _linha_para_tupla(row):
 
 def carregar_medicamentos(caminho_xlsx):
     """
-    Le o xlsx da CMED e insere na tabela medicamentos, ignorando codigos GGREM
-    ja existentes (idempotente - pode rodar de novo sem duplicar).
+    Le o xlsx da CMED e insere na tabela anvisa_medicamentos, ignorando
+    codigos GGREM ja existentes (idempotente - pode rodar de novo sem
+    duplicar).
     """
     df = pd.read_excel(caminho_xlsx)
     tuplas = [_linha_para_tupla(row) for _, row in df.iterrows()]
@@ -103,7 +104,7 @@ def carregar_medicamentos(caminho_xlsx):
             resultado = psycopg2.extras.execute_values(
                 cur,
                 """
-                INSERT INTO medicamentos (
+                INSERT INTO anvisa_medicamentos (
                     codigo_ggrem, substancia, cnpj, laboratorio, registro,
                     ean_1, ean_2, ean_3, produto, apresentacao,
                     classe_terapeutica, tipo_produto, tarja
@@ -124,9 +125,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="comando", required=True)
 
-    sub.add_parser("criar-tabela", help="Cria a tabela medicamentos se nao existir")
+    sub.add_parser("criar-tabela", help="Cria a tabela anvisa_medicamentos se nao existir")
 
-    p_carregar = sub.add_parser("carregar", help="Carrega dados de um xlsx da CMED pra tabela medicamentos")
+    p_carregar = sub.add_parser("carregar", help="Carrega dados de um xlsx da CMED pra tabela anvisa_medicamentos")
     p_carregar.add_argument("arquivo", help="Caminho do xlsx (cmed_carga.xlsx)")
 
     args = parser.parse_args()

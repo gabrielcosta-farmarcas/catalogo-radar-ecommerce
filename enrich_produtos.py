@@ -25,29 +25,28 @@ import re
 import socket
 import sys
 import time
+from datetime import date
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse
 
 import httpx
 import pandas as pd
+import psycopg2
 from anthropic import Anthropic, APIStatusError, APIConnectionError
 from PIL import Image, UnidentifiedImageError
+
+import categorias
 
 # Cole sua API key da Anthropic entre as aspas abaixo.
 # ATENÇÃO: não compartilhe nem versione este arquivo depois de preencher -
 # quem tiver acesso a ele poderá usar sua chave e gerar cobranças na sua conta.
 os.environ.setdefault("ANTHROPIC_API_KEY", "COLOQUE_SUA_KEY_AQUI")
 
-CATEGORIZATION_FILE = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "arvore_categorizacao.xlsx"
-)
-
-
-def load_categorization_tree(path=CATEGORIZATION_FILE):
+def load_categorization_tree():
     """
-    Lê a planilha oficial de categorização (colunas: Tipo de Produto,
-    Departamento, Categoria, Subcategoria) e retorna
-    (texto, combinacoes, arvores_por_ramo):
+    Lê a árvore oficial de categorização da tabela `categorias` no Postgres
+    (ver categorias.carregar_arvore) e retorna (texto, combinacoes,
+    arvores_por_ramo):
     - texto: árvore compacta completa (os 2 ramos) - fallback se o tipo
       ainda não for conhecido numa chamada de formatação. O Claude puro
       de busca NÃO recebe essa árvore: categoriza depois, só com o ramo.
@@ -59,35 +58,31 @@ def load_categorization_tree(path=CATEGORIZATION_FILE):
       as chamadas de formatação em que tipo_cadastro já veio da CMED, do
       crawler ou da busca agentic. Mandar os dois ramos nesses casos só
       infla o prompt.
-    Retorna (None, set(), {}) se o arquivo não existir (o script ainda
-    funciona, mas sem a taxonomia oficial).
+    Retorna (None, set(), {}) se a tabela estiver vazia/não existir ou o
+    Postgres estiver fora do ar (o script ainda funciona, mas sem a
+    taxonomia oficial).
     """
     try:
-        df = pd.read_excel(path)
-    except FileNotFoundError:
+        combinacoes, arvores_por_ramo = categorias.carregar_arvore()
+    except psycopg2.OperationalError as exc:
         print(
-            f"[aviso] árvore de categorização não encontrada em {path} - "
+            f"[aviso] não foi possível conectar ao Postgres para carregar a "
+            f"árvore de categorização ({exc}) - departamento/categoria/"
+            "subcategoria serão classificados sem uma taxonomia oficial.",
+            file=sys.stderr,
+        )
+        return None, set(), {}
+
+    if not arvores_por_ramo:
+        print(
+            "[aviso] tabela categorias vazia ou inexistente - "
             "departamento/categoria/subcategoria serão classificados sem "
             "uma taxonomia oficial.",
             file=sys.stderr,
         )
         return None, set(), {}
 
-    combinacoes = set()
-    arvores_por_ramo = {}
-    for tipo, g1 in df.groupby("Tipo de Produto", sort=False):
-        # o marcador RAMO não é um dos 3 campos de saída - serve só para o
-        # modelo achar o trecho certo da árvore a partir do tipo_cadastro
-        lines = [f"[RAMO {tipo} - não é nenhum campo de saída]"]
-        for depto, g2 in g1.groupby("Departamento", sort=False):
-            lines.append(f'  departamento="{depto}"')
-            for cat, g3 in g2.groupby("Categoria", sort=False):
-                subs = g3["Subcategoria"].tolist()
-                lines.append(f'    categoria="{cat}" subcategorias: {"; ".join(subs)}')
-                for sub in subs:
-                    combinacoes.add((tipo, depto, cat, sub))
-        arvores_por_ramo[tipo] = "\n".join(lines)
-    texto = "\n".join(arvores_por_ramo.values()) if arvores_por_ramo else None
+    texto = "\n".join(arvores_por_ramo.values())
     return texto, combinacoes, arvores_por_ramo
 
 
@@ -101,7 +96,9 @@ SYSTEM_PROMPT = """Você é um especialista em cadastro de produtos farmacêutic
 PROCESSO: web_search (máx. 3) em qualquer fonte confiável (fabricante, ANVISA/Bulário, farmácias \
 online); em divergência, priorize fabricante > ANVISA > farmácias. web_fetch (máx. 3) na(s) \
 página(s) mais confiável(is). Busque a URL de imagem do produto no HTML (src/data-src/og:image, \
-.jpg/.png/.webp); se for medicamento, NUNCA retorne imagem_url (null), mesmo existindo.
+.jpg/.png/.webp); se for medicamento de tarja controlada (Tarja Vermelha ou Tarja Preta), NUNCA \
+retorne imagem_url (null), mesmo existindo. Medicamento Sem Tarja (venda livre) ou com tarja não \
+confirmada tem imagem_url tratada igual não medicamento - busque e retorne normalmente.
 
 REGRA CRÍTICA: nunca invente, deduza, estime ou infira dado algum; nunca use produto ou \
 apresentação semelhante. Campo não confirmado na fonte = null (sempre melhor que dado errado).
@@ -167,8 +164,12 @@ não houver informação real o suficiente - nunca invente conteúdo só pra alo
 objetiva, sem termos comerciais/emojis, com nome+marca+finalidade, escrita com suas próprias \
 palavras - nunca copie frase da bula/página quase literalmente, mesmo trocando 1-2 palavras; pode \
 usar sinônimo, nunca mudar o fato/grau/nuance médica. \
-imagem_url = URL real encontrada na página, null se não achar ou se for medicamento. \
-pagina_produto_url = URL da fonte principal. frase_obrigatoria NÃO é campo de saída - \
+imagem_url = URL real encontrada na página, null se não achar ou se for medicamento de tarja \
+controlada (Tarja Vermelha/Preta). pagina_produto_url = URL da fonte principal. preco_pesquisado = preço exatamente como exibido na \
+página da fonte principal (ex: "R$ 19,90"), null se a página não mostrar preço ou o preço achado \
+não for claramente desta apresentação específica - é só uma referência do que foi visto na busca, \
+NUNCA um dado oficial do produto, então nunca infira nem estime a partir de outra apresentação/ \
+embalagem. frase_obrigatoria NÃO é campo de saída - \
 é composta depois em código a partir de tarja/tipo_cadastro/genérico/fórmula infantil. \
 departamento/categoria/subcategoria NÃO são campos de saída desta chamada - a árvore \
 oficial é aplicada depois, numa formatação sem busca, só com o ramo do tipo_cadastro.
@@ -181,7 +182,7 @@ termos promocionais ou emojis em nenhum campo.
 Responda APENAS com JSON válido, sem markdown: {"titulo": str|null, "marca": str|null, \
 "fabricante": str|null, "tipo_cadastro": str|null, "registro_ms": str|null, "generico": str|null, \
 "tarja": str|null, "principios_ativos": str|null, "descricao_curta": str|null, \
-"imagem_url": str|null, "pagina_produto_url": str|null}."""
+"imagem_url": str|null, "pagina_produto_url": str|null, "preco_pesquisado": str|null}."""
 
 RESULT_COLUMNS = [
     "titulo",
@@ -191,6 +192,7 @@ RESULT_COLUMNS = [
     "registro_ms",
     "generico",
     "tarja",
+    "precisa_retencao_receita",
     "principios_ativos",
     "descricao_curta",
     "frase_obrigatoria",
@@ -199,6 +201,8 @@ RESULT_COLUMNS = [
     "subcategoria",
     "imagem_url",
     "pagina_produto_url",
+    "preco_pesquisado",
+    "data_pesquisa",
 ]
 STATUS_COLUMN = "status_enriquecimento"
 TOKENS_COLUMN = "tokens_utilizados"
@@ -1173,6 +1177,11 @@ def _ferramentas_tarja(max_uses=2):
 
 ALLOWED_TARJA = {"Sem Tarja", "Tarja Vermelha", "Tarja Preta", "Não aplicável"}
 
+# só essas tarjas bloqueiam imagem de medicamento - tarja vazia (não
+# confirmada) ou "Sem Tarja" (venda livre) tem imagem liberada igual
+# não-medicamento (ver apply_safety_checks)
+TARJA_CONTROLADA = {"Tarja Vermelha", "Tarja Preta"}
+
 # prefixo de origem_enriquecimento usado pela camada 0 (cmed.py, ver
 # enrich_com_crawler.py) - mesmo valor de cmed.ORIGEM_ANVISA_CMED, duplicado
 # aqui só como uma string pra não criar dependência deste módulo em cmed.py
@@ -1302,6 +1311,7 @@ CAMPOS_DEPENDENTES_DE_FONTE = (
     "departamento",
     "categoria",
     "tarja",
+    "preco_pesquisado",
 )
 
 # dimensão mínima (em pixels) para aceitar imagem_url - abaixo disso é
@@ -1401,8 +1411,8 @@ def check_imagem_tamanho_minimo(
 def validar_categorizacao(data):
     """
     Confere se (departamento, categoria, subcategoria) devolvidos pelo modelo
-    realmente existem na árvore oficial (arvore_categorizacao.xlsx), em vez
-    de confiar que o modelo seguiu a instrução do prompt. Sem a planilha
+    realmente existem na árvore oficial (tabela `categorias` no Postgres),
+    em vez de confiar que o modelo seguiu a instrução do prompt. Sem a árvore
     carregada (COMBINACOES_CATEGORIZACAO_VALIDAS vazio), não valida - não dá
     para diferenciar "categoria inventada" de "taxonomia indisponível".
     Retorna (ok: bool, motivo: str|None).
@@ -1479,27 +1489,8 @@ def apply_safety_checks(data, ean):
     """
     is_medicamento = data.get("tipo_cadastro") == "Medicamento"
 
-    # imagem_url nunca deve vir preenchida para medicamento
-    if is_medicamento and data.get("imagem_url"):
-        print(
-            f"  [info] imagem removida para EAN {ean} (produto é "
-            f"medicamento, imagem nunca deve ser retornada): "
-            f"{data['imagem_url']}"
-        )
-        data["imagem_url"] = None
-
-    # imagem pequena demais (ícone/logo/thumbnail) não serve como foto de
-    # produto - descarta sem gastar token, é só download + leitura local
-    if not is_medicamento and data.get("imagem_url"):
-        ok, motivo = check_imagem_tamanho_minimo(data["imagem_url"])
-        if not ok:
-            print(
-                f"  [aviso] imagem descartada para EAN {ean} ({motivo}): "
-                f"{data['imagem_url']}"
-            )
-            data["imagem_url"] = None
-
-    # tarja fora do vocabulário fechado = alucinação, zera
+    # tarja fora do vocabulário fechado = alucinação, zera. Feito antes da
+    # decisão sobre imagem (mais abaixo), que depende da tarja já sanitizada.
     tarja = data.get("tarja")
     if tarja is not None and tarja not in ALLOWED_TARJA:
         print(f"  [aviso] tarja inválida para EAN {ean} ({tarja!r}) - zerada.")
@@ -1543,6 +1534,36 @@ def apply_safety_checks(data, ean):
         )
         data["tarja"] = tarja = None
 
+    # retenção de receita: só Tarja Preta exige - carimbada em código
+    # (não pelo modelo) a partir da tarja já sanitizada pelos dois checks
+    # acima, mesma lógica determinística de frase_obrigatoria/imagem.
+    data["precisa_retencao_receita"] = "Sim" if tarja == "Tarja Preta" else "Não"
+
+    # imagem: bloqueada só para medicamento de tarja controlada (Vermelha/
+    # Preta) - tarja vazia (não confirmada) ou "Sem Tarja" (venda livre)
+    # libera imagem igual não-medicamento. Calculado só agora, depois da
+    # tarja já sanitizada pelos dois checks acima, pra não deixar passar
+    # imagem de um controlado que só parecia "Sem Tarja" por vocabulário
+    # inválido ou por fonte não confirmada.
+    imagem_bloqueada = is_medicamento and tarja in TARJA_CONTROLADA
+    if imagem_bloqueada and data.get("imagem_url"):
+        print(
+            f"  [info] imagem removida para EAN {ean} (medicamento com "
+            f"tarja controlada - {tarja}): {data['imagem_url']}"
+        )
+        data["imagem_url"] = None
+
+    # imagem pequena demais (ícone/logo/thumbnail) não serve como foto de
+    # produto - descarta sem gastar token, é só download + leitura local
+    if not imagem_bloqueada and data.get("imagem_url"):
+        ok, motivo = check_imagem_tamanho_minimo(data["imagem_url"])
+        if not ok:
+            print(
+                f"  [aviso] imagem descartada para EAN {ean} ({motivo}): "
+                f"{data['imagem_url']}"
+            )
+            data["imagem_url"] = None
+
     # registro_ms e generico só fazem sentido para medicamento
     if not is_medicamento:
         if data.get("registro_ms"):
@@ -1553,6 +1574,12 @@ def apply_safety_checks(data, ean):
             data["registro_ms"] = None
         if data.get("generico"):
             data["generico"] = None
+
+    # data_pesquisa: carimbada em código (não pelo modelo, que não tem como
+    # saber a data real da chamada) - só faz sentido quando um preço foi de
+    # fato encontrado, senão fica sem sentido registrar "quando" de um dado
+    # que não existe.
+    data["data_pesquisa"] = date.today().isoformat() if data.get("preco_pesquisado") else None
 
     # departamento/categoria/subcategoria: confere contra a árvore oficial em
     # vez de confiar que o modelo seguiu a instrução do prompt - o modelo já
@@ -1870,6 +1897,27 @@ def call_model(
                 data["frase_obrigatoria"] = compor_frase_obrigatoria(
                     data, data.get("tarja"), True
                 )
+
+                # precisa_retencao_receita também depende da tarja - mesma
+                # lógica determinística de apply_safety_checks, recalculada
+                # aqui com o valor final pós-verificação dedicada
+                data["precisa_retencao_receita"] = (
+                    "Sim" if data.get("tarja") == "Tarja Preta" else "Não"
+                )
+
+                # imagem também depende da tarja (ver apply_safety_checks) -
+                # a verificação dedicada pode ter mudado a tarja depois que
+                # aquela função já decidiu se a imagem ficava ou não (ex:
+                # modelo achou "Sem Tarja" na resposta principal e trouxe
+                # imagem, mas a verificação dedicada confirmou "Tarja
+                # Vermelha") - remove agora se a tarja final for controlada.
+                if data.get("tarja") in TARJA_CONTROLADA and data.get("imagem_url"):
+                    print(
+                        f"  [info] imagem removida para EAN {ean} - "
+                        f"verificação dedicada confirmou tarja controlada "
+                        f"({data['tarja']}): {data['imagem_url']}"
+                    )
+                    data["imagem_url"] = None
 
             if verify_images and data.get("imagem_url"):
                 ok, verify_tokens = verify_image(

@@ -27,7 +27,7 @@ Fluxo de fases de `produtos.fase_atual` (nesta ordem):
                                                               |
                                                           concluido | nao_localizado
 
-Se o EAN está na tabela `medicamentos` (CMED/ANVISA), é tratado como verdade
+Se o EAN está na tabela `anvisa_medicamentos` (CMED/ANVISA), é tratado como verdade
 absoluta: tipo_cadastro, registro_ms, fabricante, generico e tarja vêm direto
 de lá, sem precisar da fase de verificação de tarja (`aguardando_batch_tarja`)
 - só falta uma formatação leve de título/composição/categoria
@@ -101,7 +101,7 @@ CREATE TABLE IF NOT EXISTS produtos (
     -- resultado da tabela oficial da ANVISA (fase -1, sincrono, sem custo de
     -- token, verdade absoluta quando achar - ver verificar_cmed())
     status_cmed             TEXT NOT NULL DEFAULT 'pendente',  -- pendente | achou | nao_achou
-    dados_cmed              JSONB,                              -- linha da tabela medicamentos, se achou
+    dados_cmed              JSONB,                              -- linha da tabela anvisa_medicamentos, se achou
 
     -- resultado do crawler (fase 0, sincrono, sem custo de token)
     status_crawler          TEXT NOT NULL DEFAULT 'pendente',  -- pendente | achou | nao_achou
@@ -218,7 +218,7 @@ def contar_por_fase():
 
 def _carregar_indice_cmed():
     """
-    Carrega a tabela medicamentos inteira numa vez e monta um índice
+    Carrega a tabela anvisa_medicamentos inteira numa vez e monta um índice
     {ean_normalizado: linha} - muito mais rápido que uma consulta por EAN
     quando há muitas linhas pra verificar (produtos pode ter centenas de
     milhares de linhas; a CMED tem só ~26 mil).
@@ -227,7 +227,7 @@ def _carregar_indice_cmed():
     indice = {}
     with cmed.conectar() as conn:
         with conn.cursor() as cur:
-            cur.execute(f"SELECT {', '.join(campos)} FROM medicamentos")
+            cur.execute(f"SELECT {', '.join(campos)} FROM anvisa_medicamentos")
             for linha in cur.fetchall():
                 registro = dict(zip(campos, linha))
                 for chave_ean in ("ean_1", "ean_2", "ean_3"):
@@ -240,7 +240,7 @@ def _carregar_indice_cmed():
 def verificar_cmed():
     """
     Verifica todo produto com fase_atual='aguardando_cmed' contra a tabela
-    oficial da ANVISA (medicamentos). Se achar, o EAN é tratado como verdade
+    oficial da ANVISA (anvisa_medicamentos). Se achar, o EAN é tratado como verdade
     absoluta: tipo_cadastro/registro_ms/fabricante/generico/tarja vêm direto
     de lá, sem gastar token nenhum, e a fase de verificação dedicada de tarja
     (aguardando_batch_tarja) nunca é necessária pra esse produto - só falta
@@ -249,7 +249,7 @@ def verificar_cmed():
     (fluxo normal, sem mudança nenhuma).
     """
     indice = _carregar_indice_cmed()
-    print(f"{len(indice)} EAN(s) indexados da tabela medicamentos.")
+    print(f"{len(indice)} EAN(s) indexados da tabela anvisa_medicamentos.")
 
     with conectar() as conn:
         with conn.cursor() as cur:
@@ -323,7 +323,7 @@ def main():
 
     sub.add_parser(
         "verificar-cmed",
-        help="Verifica produtos aguardando_cmed contra a tabela oficial da ANVISA (medicamentos)",
+        help="Verifica produtos aguardando_cmed contra a tabela oficial da ANVISA (anvisa_medicamentos)",
     )
 
     args = parser.parse_args()

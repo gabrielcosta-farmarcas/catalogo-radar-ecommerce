@@ -1,6 +1,6 @@
 """
-Consulta a tabela `medicamentos` (carregada por carregar_cmed.py a partir do
-cmed_carga.xlsx, base oficial da ANVISA) por EAN.
+Consulta a tabela `anvisa_medicamentos` (carregada por carregar_cmed.py a
+partir do cmed_carga.xlsx, base oficial da ANVISA) por EAN.
 
 Módulo separado de propósito - conexão própria, não importa db.py (que é
 isolado pro fluxo de batch experimental). Usado como camada 0 do
@@ -60,7 +60,7 @@ def normalizar_ean(valor):
     como GTIN-14 preenchendo com '0' na frente: 05702150153890). Como EAN é
     numérico por natureza, remove qualquer zero à esquerda convertendo para
     int e de volta - 05702150153890 -> 5702150153890, que é como a tabela
-    medicamentos guarda o valor (ver carregar_cmed.py).
+    anvisa_medicamentos guarda o valor (ver carregar_cmed.py).
     """
     digitos = re.sub(r"\D", "", str(valor or ""))
     if not digitos:
@@ -75,7 +75,7 @@ def normalizar_ean(valor):
 
 def buscar_medicamento_anvisa(ean):
     """
-    Busca o EAN (normalizado) em ean_1/ean_2/ean_3 da tabela medicamentos.
+    Busca o EAN (normalizado) em ean_1/ean_2/ean_3 da tabela anvisa_medicamentos.
     Retorna um dict com os campos da CMED, ou None se o EAN não está na base
     oficial da ANVISA - nesse caso o chamador deve seguir o fluxo normal
     (crawler/Google/Claude), já que "não está na CMED" não significa "não é
@@ -88,7 +88,7 @@ def buscar_medicamento_anvisa(ean):
     with conectar() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                f"SELECT {', '.join(CAMPOS)} FROM medicamentos "
+                f"SELECT {', '.join(CAMPOS)} FROM anvisa_medicamentos "
                 "WHERE ean_1 = %s OR ean_2 = %s OR ean_3 = %s LIMIT 1",
                 (ean_normalizado, ean_normalizado, ean_normalizado),
             )
