@@ -227,6 +227,14 @@ MENSAGEM_VALIDACAO_CLAUDE_MEDICAMENTO = (
     "registro MS, princípio ativo e se é de fato esta apresentação."
 )
 
+MENSAGEM_VALIDACAO_CMED_TARJA = (
+    "VALIDAÇÃO HUMANA OBRIGATÓRIA: a CMED/ANVISA não informou a tarja deste "
+    "medicamento (campo tarja vazio na base oficial - "
+    "confirmado_anvisa_cmed continua Sim para os outros campos, que "
+    "seguem confiáveis). Não publicar no e-commerce antes de um "
+    "responsável confirmar a tarja em fonte oficial (bula/ANVISA)."
+)
+
 MENSAGEM_VALIDACAO_ABCFARMA_TARJA = (
     "VALIDAÇÃO HUMANA OBRIGATÓRIA: este medicamento foi confirmado pela "
     "base ABCFarma (registro MS/princípio ativo/fabricante confiáveis), mas "
@@ -276,6 +284,7 @@ def marcar_validacao_humana(data):
         return data
     origem = str(data.get("origem_enriquecimento") or "claude").strip().lower()
     so_web = origem.startswith("claude")
+    so_cmed = origem.startswith(ORIGEM_ANVISA_CMED)
     so_abcfarma = origem.startswith(ORIGEM_ABCFARMA)
     so_iqvia = origem.startswith(ORIGEM_IQVIA)
     so_crawler = origem.startswith("crawler")
@@ -285,6 +294,13 @@ def marcar_validacao_humana(data):
     if medicamento and so_web:
         data[VALIDACAO_HUMANA_COLUMN] = "Sim"
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CLAUDE_MEDICAMENTO
+    elif medicamento and so_cmed and not data.get("tarja"):
+        # CMED confirmou o medicamento mas não informou a tarja (campo
+        # "- (*)") - ver mapear_cmed_para_schema em enrich_com_crawler.py,
+        # que já não tenta cruzar com substancias_controladas nesse caso
+        # (sem saber a cor da tarja, não dá pra confiar na retenção também)
+        data[VALIDACAO_HUMANA_COLUMN] = "Sim"
+        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CMED_TARJA
     elif medicamento and so_abcfarma and not data.get("tarja"):
         data[VALIDACAO_HUMANA_COLUMN] = "Sim"
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_ABCFARMA_TARJA
@@ -1202,6 +1218,12 @@ ORIGEM_ABCFARMA = "abcfarma"
 ORIGEM_IQVIA = "iqvia"
 
 FRASE_VENDA_PRESCRICAO = "VENDA SOB PRESCRIÇÃO MÉDICA."
+# usada no lugar de FRASE_VENDA_PRESCRICAO quando precisa_retencao_receita
+# for "Sim" - texto oficial da Portaria 344 (ex: adendo 2 da Lista A1)
+FRASE_VENDA_PRESCRICAO_RETENCAO = (
+    "VENDA SOB PRESCRIÇÃO MÉDICA - SÓ PODE SER VENDIDO COM RETENÇÃO DA "
+    "RECEITA."
+)
 FRASE_MEDICAMENTO_GERAL = (
     "ESTE É UM MEDICAMENTO. SEU USO PODE TRAZER RISCOS. PROCURE O MÉDICO E O "
     "FARMACÊUTICO. LEIA A BULA. SE PERSISTIREM OS SINTOMAS, O MÉDICO DEVERÁ SER "
@@ -1446,9 +1468,17 @@ def compor_frase_obrigatoria(data, tarja, is_medicamento):
     canônico de medicamento em geral). Idempotente - pode ser chamada de novo
     depois que a tarja for atualizada por verify_tarja_registro, sem duplicar
     nem perder a frase de fórmula infantil.
+
+    precisa_retencao_receita (já em data, calculado antes desta função) troca
+    a frase de prescrição pela variante com retenção quando for "Sim" - Tarja
+    Preta sempre entra aqui (retenção é sempre exigida), e Tarja Vermelha
+    entra quando a substância bate na tabela substancias_controladas (ver
+    enrich_com_crawler.mapear_cmed_para_schema).
     """
     partes = []
-    if tarja in ("Tarja Vermelha", "Tarja Preta"):
+    if data.get("precisa_retencao_receita") == "Sim":
+        partes.append(FRASE_VENDA_PRESCRICAO_RETENCAO)
+    elif tarja in ("Tarja Vermelha", "Tarja Preta"):
         partes.append(FRASE_VENDA_PRESCRICAO)
     if is_medicamento:
         partes.append(FRASE_MEDICAMENTO_GERAL)
@@ -1534,10 +1564,13 @@ def apply_safety_checks(data, ean):
         )
         data["tarja"] = tarja = None
 
-    # retenção de receita: só Tarja Preta exige - carimbada em código
-    # (não pelo modelo) a partir da tarja já sanitizada pelos dois checks
-    # acima, mesma lógica determinística de frase_obrigatoria/imagem.
-    data["precisa_retencao_receita"] = "Sim" if tarja == "Tarja Preta" else "Não"
+    # retenção de receita - carimbada em código (não pelo modelo), mesma
+    # lógica determinística de frase_obrigatoria/imagem. Para origem CMED,
+    # mapear_cmed_para_schema já decidiu esse campo com a regra combinada
+    # com o time de negócio (Tarja Preta / Sem Tarja / "- (*)" / Tarja
+    # Vermelha cruzada com substancias_controladas) - não sobrescreve.
+    if not origem_e_cmed:
+        data["precisa_retencao_receita"] = "Sim" if tarja == "Tarja Preta" else "Não"
 
     # imagem: bloqueada só para medicamento de tarja controlada (Vermelha/
     # Preta) - tarja vazia (não confirmada) ou "Sem Tarja" (venda livre)

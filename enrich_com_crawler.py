@@ -64,6 +64,7 @@ from crawler.adapters.venancio import VenancioAdapter
 import abcfarma
 import cmed
 import iqvia
+import substancias_controladas
 import enrich_produtos as ep
 
 # mesma ordem de prioridade do scraper.consolidate - sites mais confiáveis/
@@ -354,6 +355,38 @@ def _limpar_marca_iqvia(brand):
     return sem_sufixo.title() or None
 
 
+def _resolver_tarja_e_retencao_cmed(tarja_bruta, principios_ativos):
+    """
+    Decide tarja final e precisa_retencao_receita a partir do valor BRUTO de
+    tarja da CMED (antes de cmed.TARJA_CMED_PARA_SCHEMA) - regra combinada
+    com o time de negócio:
+    - "Tarja Preta" -> retenção "Sim" (sozinha já basta, sempre exige).
+    - "Sem Tarja" -> retenção "Não", sem consultar substancias_controladas -
+      venda livre de verdade não precisa dessa checagem extra.
+    - Valor não reconhecido pela CMED (ex: "- (*)", tarja não informada) ->
+      tarja e retenção ficam None - só isso já joga a linha pra validação
+      humana (ver ep.marcar_validacao_humana), sem tentar adivinhar nada.
+    - Qualquer outro valor reconhecido ("Tarja Vermelha", e "Tarja Vermelha
+      sob restrição" que TARJA_CMED_PARA_SCHEMA já normaliza pra Vermelha)
+      -> cruza o princípio ativo com substancias_controladas (Portaria 344 /
+      IN 360-RDC 471 - antimicrobianos e GLP-1 exigem retenção mesmo em
+      Tarja Vermelha comum): achou vira retenção "Sim", não achou vira
+      retenção "Não" - a tarja final é Tarja Vermelha nos dois casos.
+
+    Retorna (tarja, precisa_retencao_receita).
+    """
+    tarja_normalizada = cmed.TARJA_CMED_PARA_SCHEMA.get(tarja_bruta)
+    if tarja_normalizada == "Tarja Preta":
+        return "Tarja Preta", "Sim"
+    if tarja_normalizada == "Sem Tarja":
+        return "Sem Tarja", "Não"
+    if tarja_normalizada is None:
+        return None, None
+    # só sobra "Tarja Vermelha" (a normalização da CMED não tem outro valor)
+    achou = substancias_controladas.substancia_esta_controlada(principios_ativos)
+    return "Tarja Vermelha", ("Sim" if achou else "Não")
+
+
 def mapear_cmed_para_schema(medicamento, ean, client, model):
     """
     Traduz o resultado da tabela oficial da ANVISA (CMED) pro schema da
@@ -409,6 +442,10 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
         client, model, substancia, apresentacao
     )
 
+    tarja_final, retencao_final = _resolver_tarja_e_retencao_cmed(
+        medicamento["tarja"], principios_ativos
+    )
+
     # classe_terapeutica sozinha (ex: "M2A - ANTIRREUMÁTICOS E ANALGÉSICOS
     # TÓPICOS") levava o modelo a categorizar fitoterápicos (ex: Acheflan/
     # Cordia Verbenacea) ora em "Dor e Febre", ora em "Fitoterápicos e
@@ -455,7 +492,8 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
         "tipo_cadastro": "Medicamento",
         "registro_ms": medicamento["registro"],
         "generico": "Sim" if medicamento["tipo_produto"] == "Genérico" else "Não",
-        "tarja": cmed.TARJA_CMED_PARA_SCHEMA.get(medicamento["tarja"]),
+        "tarja": tarja_final,
+        "precisa_retencao_receita": retencao_final,
         "principios_ativos": principios_ativos,
         "descricao_curta": formatados.get("descricao_curta"),
         "frase_obrigatoria": None,
