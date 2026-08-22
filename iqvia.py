@@ -87,3 +87,36 @@ def buscar_produto_iqvia(ean):
     if row is None:
         return None
     return dict(zip(CAMPOS, row))
+
+
+def buscar_categoria_mapeada(tipo_cadastro, area_farmacia, sub_cat1, sub_cat2, sub_cat3, sub_cat4):
+    """
+    Consulta mapeamento_categoria_iqvia (ver mapear_categorias_iqvia.py) por
+    uma combinação de taxonomia já revisada por humano. Retorna
+    {"departamento", "categoria", "subcategoria"} (valores podem ser None,
+    se a revisão confirmou que nenhuma categoria da árvore se aplica) ou
+    None se a combinação não existir na tabela ou ainda não tiver sido
+    revisada - nesse caso o chamador deve cair no fluxo normal (perguntar
+    pro Claude a partir da dica bruta, como já faz hoje).
+    """
+    with conectar() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT departamento, categoria, subcategoria
+                FROM mapeamento_categoria_iqvia
+                WHERE tipo_cadastro = %s
+                  AND coalesce(area_farmacia, '') = coalesce(%s, '')
+                  AND coalesce(sub_cat1, '') = coalesce(%s, '')
+                  AND coalesce(sub_cat2, '') = coalesce(%s, '')
+                  AND coalesce(sub_cat3, '') = coalesce(%s, '')
+                  AND coalesce(sub_cat4, '') = coalesce(%s, '')
+                  AND revisado_humanamente = true
+                """,
+                (tipo_cadastro, area_farmacia, sub_cat1, sub_cat2, sub_cat3, sub_cat4),
+            )
+            row = cur.fetchone()
+
+    if row is None:
+        return None
+    return {"departamento": row[0], "categoria": row[1], "subcategoria": row[2]}

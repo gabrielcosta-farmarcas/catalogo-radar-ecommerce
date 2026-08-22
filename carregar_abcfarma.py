@@ -20,7 +20,8 @@ from db import conectar
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS abcfarma_medicamentos (
-    codigo_produto      TEXT PRIMARY KEY,
+    id                  BIGSERIAL PRIMARY KEY,
+    codigo_produto      TEXT UNIQUE NOT NULL,
     ean                 TEXT,
     descricao_produto   TEXT NOT NULL,
     apresentacao        TEXT,

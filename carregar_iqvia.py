@@ -6,7 +6,7 @@ abcfarma.py). Base rica enviada por um parceiro/distribuidor: ~260 mil
 produtos (medicamento e não-medicamento), com classificação regulatória
 (SETOR_NEC_ABERTO) e taxonomia própria de categoria (SUB_CAT1..4,
 AREA_FARMACIA) - cobre não-medicamento também, diferente de CMED/ABCFarma.
-EAN é a chave primária (não FCC) - linha sem EAN é descartada na carga.
+EAN é único (não FCC) - linha sem EAN é descartada na carga.
 
 Uso:
     python carregar_iqvia.py criar-tabela
@@ -25,7 +25,8 @@ from db import conectar
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS iqvia_produtos (
-    ean                     TEXT PRIMARY KEY,
+    id                      BIGSERIAL PRIMARY KEY,
+    ean                     TEXT UNIQUE NOT NULL,
     fcc                     TEXT NOT NULL,
     brand                   TEXT NOT NULL,
     descricao_longa         TEXT NOT NULL,

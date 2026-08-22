@@ -1,18 +1,17 @@
 """
-Enriquece o arquivo eans_estoque_sem_venda_12m.xlsx buscando informações de
-produto na internet via Claude (Anthropic API), usando os tools nativos
-web_search e web_fetch.
+Enriquece produtos pendentes da tabela `produtos` (Postgres, ver db.py)
+buscando informações na internet via Claude (Anthropic API), usando os tools
+nativos web_search e web_fetch.
 
 Uso básico:
     python enrich_produtos.py
 
 Uso com opções:
-    python enrich_produtos.py --input eans_estoque_sem_venda_12m.xlsx \
-        --output eans_estoque_sem_venda_12m_enriquecido.xlsx \
-        --limit 20 --checkpoint-every 5
+    python enrich_produtos.py --eans 7891234567890,7899876543210 --limit 20
 
-Requer a variável de ambiente ANTHROPIC_API_KEY (ou uma sessão autenticada
-via `ant auth login`).
+Requer a variável de ambiente ANTHROPIC_API_KEY - defina num arquivo .env na
+raiz do projeto (carregado automaticamente) ou exporte no shell antes de
+rodar. Também funciona com uma sessão autenticada via `ant auth login`.
 """
 
 import argparse
@@ -37,9 +36,32 @@ from PIL import Image, UnidentifiedImageError
 
 import categorias
 
-# Cole sua API key da Anthropic entre as aspas abaixo.
-# ATENÇÃO: não compartilhe nem versione este arquivo depois de preencher -
-# quem tiver acesso a ele poderá usar sua chave e gerar cobranças na sua conta.
+
+def _carregar_dotenv():
+    """
+    Carrega variáveis do arquivo .env (na raiz do projeto, mesma pasta deste
+    script) pro ambiente, se ainda não estiverem definidas - evita ter que
+    rodar `source .env` manualmente antes de cada execução. Nunca sobrescreve
+    uma variável já exportada no shell (essa sempre tem prioridade).
+    """
+    caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(caminho):
+        return
+    with open(caminho, encoding="utf-8") as arquivo:
+        for linha in arquivo:
+            linha = linha.strip()
+            if not linha or linha.startswith("#") or "=" not in linha:
+                continue
+            chave, _, valor = linha.partition("=")
+            valor = valor.strip().strip('"').strip("'")
+            os.environ.setdefault(chave.strip(), valor)
+
+
+_carregar_dotenv()
+
+# API key da Anthropic: defina ANTHROPIC_API_KEY num arquivo .env na raiz do
+# projeto (esse arquivo já está no .gitignore - nunca cole a key aqui no
+# código-fonte, isso vaza a chave pra quem tiver acesso ao repositório).
 os.environ.setdefault("ANTHROPIC_API_KEY", "COLOQUE_SUA_KEY_AQUI")
 
 def load_categorization_tree():
@@ -204,13 +226,6 @@ RESULT_COLUMNS = [
     "preco_pesquisado",
     "data_pesquisa",
 ]
-STATUS_COLUMN = "status_enriquecimento"
-TOKENS_COLUMN = "tokens_utilizados"
-CACHE_READ_COLUMN = "tokens_cache_lidos"
-CACHE_CREATION_COLUMN = "tokens_cache_gravados"
-
-# colunas de versões antigas do schema, sem uso hoje - removidas automaticamente
-LEGACY_COLUMNS = ["nome_completo", "descricao_completa", "palavras_chave"]
 
 STATUS_OK = "OK"
 STATUS_NOT_FOUND = "Não localizado"
@@ -432,6 +447,7 @@ def verify_image(client, model, image_url, ean, nome_produto, titulo):
         response = client.messages.create(
             model=model,
             max_tokens=200,
+            temperature=0,
             messages=[
                 {
                     "role": "user",
@@ -659,6 +675,12 @@ def _chamar_formatacao_campos(client, model, system, mensagem, max_tokens=400):
             max_tokens=max_tokens,
             system=system,
             messages=[{"role": "user", "content": mensagem}],
+            # temperature 0 (em vez do padrão do modelo) - essa chamada decide
+            # titulo/descricao/categoria a partir de fatos já confirmados, é
+            # uma tarefa de classificação/formatação, não geração criativa;
+            # reduz a inconsistência entre rodadas (mesmo produto caindo em
+            # categoria diferente da árvore) sem custo extra de token.
+            temperature=0,
         )
         tokens, cache_creation, cache_read = response_usage(response)
         usage["tokens"] = tokens
@@ -800,6 +822,7 @@ def categorizar_apos_busca(
     data["departamento"] = None
     data["categoria"] = None
     data["subcategoria"] = None
+    data["origem_categorizacao"] = "ia"
 
     if not data.get("titulo"):
         return data, usage
@@ -972,6 +995,7 @@ def formatar_composicao_cmed(client, model, substancia, apresentacao):
         response = client.messages.create(
             model=model,
             max_tokens=200,
+            temperature=0,
             system=CMED_COMPOSICAO_SYSTEM_BLOCK,
             messages=[{"role": "user", "content": mensagem}],
         )
@@ -1066,6 +1090,7 @@ def verify_tarja_registro(client, model, ean, titulo, marca, principios_ativos, 
             response = client.messages.create(
                 model=model,
                 max_tokens=800,
+                temperature=0,
                 system=TARJA_VERIFICATION_SYSTEM_BLOCK,
                 tools=tools,
                 messages=messages,
@@ -1081,6 +1106,7 @@ def verify_tarja_registro(client, model, ean, titulo, marca, principios_ativos, 
                 response = client.messages.create(
                     model=model,
                     max_tokens=800,
+                    temperature=0,
                     system=TARJA_VERIFICATION_SYSTEM_BLOCK,
                     tools=tools,
                     messages=messages,
@@ -1519,6 +1545,13 @@ def apply_safety_checks(data, ean):
     """
     is_medicamento = data.get("tipo_cadastro") == "Medicamento"
 
+    # não-medicamento nunca tem tarja nem retenção de receita - carimba os
+    # dois campos aqui em vez de deixar null/ambíguo (a fonte não confirma
+    # isso porque a pergunta não se aplica, não porque falhou em confirmar).
+    if not is_medicamento:
+        data["tarja"] = "Não aplicável"
+        data["precisa_retencao_receita"] = "Não"
+
     # tarja fora do vocabulário fechado = alucinação, zera. Feito antes da
     # decisão sobre imagem (mais abaixo), que depende da tarja já sanitizada.
     tarja = data.get("tarja")
@@ -1810,6 +1843,7 @@ def call_model(
             response = client.messages.create(
                 model=model,
                 max_tokens=1200,
+                temperature=0,
                 system=SYSTEM_BLOCK,
                 tools=tools,
                 messages=messages,
@@ -1824,6 +1858,7 @@ def call_model(
                 response = client.messages.create(
                     model=model,
                     max_tokens=1200,
+                    temperature=0,
                     system=SYSTEM_BLOCK,
                     tools=tools,
                     messages=messages,
@@ -1867,6 +1902,7 @@ def call_model(
             usage["cache_read"] += usage_cat["cache_read"]
 
             data = apply_safety_checks(data, ean)
+            data["model"] = model
 
             if verify_tarja and data.get("tipo_cadastro") == "Medicamento":
                 resultado_verif, usage_verif = verify_tarja_registro(
@@ -1983,56 +2019,200 @@ def call_model(
     return None, usage
 
 
-def apply_result(df, idx, data, usage=None):
+DB_CONFIG = {
+    "host": os.environ.get("PG_HOST", "localhost"),
+    "port": os.environ.get("PG_PORT", "5433"),
+    "user": os.environ.get("PG_USER", "cadastro"),
+    "password": os.environ.get("PG_PASSWORD", "cadastro"),
+    "dbname": os.environ.get("PG_DB", "cadastro_produtos"),
+}
+
+FASES_TERMINAIS = ("concluido", "nao_localizado")
+
+# colunas gravadas em produtos além de RESULT_COLUMNS/VALIDACAO_COLUMNS - vêm
+# de fontes oficiais (CMED/ABCFarma/IQVIA/crawler) em enrich_com_crawler.py,
+# não da resposta do Claude puro
+COLUNAS_ORIGEM = ["origem_enriquecimento", "confirmado_anvisa_cmed", "origem_categorizacao", "model"]
+
+
+def conectar():
+    return psycopg2.connect(**DB_CONFIG)
+
+
+def buscar_pendentes(conn, eans=None, limit=None):
+    """
+    Lista (ean, nome_produto) pendentes de enriquecimento na tabela
+    produtos. Sem `eans`, pega qualquer linha fora das fases terminais
+    (concluido/nao_localizado), na ordem do EAN. Com `eans`, ignora a fase e
+    busca só esses EANs específicos - útil pra reprocessar um caso pontual.
+    """
+    with conn.cursor() as cur:
+        if eans:
+            cur.execute(
+                "SELECT ean, nome_produto FROM produtos WHERE ean = ANY(%s) ORDER BY ean",
+                (list(eans),),
+            )
+        else:
+            query = (
+                "SELECT ean, nome_produto FROM produtos "
+                "WHERE fase_atual NOT IN %s ORDER BY ean"
+            )
+            params = [FASES_TERMINAIS]
+            if limit is not None:
+                query += " LIMIT %s"
+                params.append(limit)
+            cur.execute(query, params)
+        return cur.fetchall()
+
+
+def salvar_resultado(conn, ean, data, usage=None):
+    """
+    Grava o resultado de um EAN na tabela produtos e comita na hora - uma
+    transação por linha, então se o processo cair no meio, no máximo essa
+    linha se perde, nunca as já concluídas antes dela.
+    """
     usage = usage or {"tokens": 0, "cache_creation": 0, "cache_read": 0}
-    df.at[idx, TOKENS_COLUMN] = usage["tokens"]
-    df.at[idx, CACHE_CREATION_COLUMN] = usage["cache_creation"]
-    df.at[idx, CACHE_READ_COLUMN] = usage["cache_read"]
 
     if data is None or not data.get("titulo"):
-        df.at[idx, STATUS_COLUMN] = STATUS_NOT_FOUND
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE produtos
+                SET fase_atual = 'nao_localizado',
+                    tokens_utilizados = %s,
+                    tokens_cache_gravados = %s,
+                    tokens_cache_lidos = %s,
+                    atualizado_em = now()
+                WHERE ean = %s
+                RETURNING id
+                """,
+                (usage["tokens"], usage["cache_creation"], usage["cache_read"], ean),
+            )
+            produto_id = cur.fetchone()[0]
+            registrar_versao_historico(cur, produto_id, ean, "nao_localizado", {}, usage)
+        conn.commit()
         return
 
-    for col in RESULT_COLUMNS:
-        df.at[idx, col] = data.get(col)
     data = marcar_validacao_humana(data)
-    for col in VALIDACAO_COLUMNS:
-        df.at[idx, col] = data.get(col)
-    df.at[idx, STATUS_COLUMN] = STATUS_OK
+    colunas = RESULT_COLUMNS + VALIDACAO_COLUMNS + COLUNAS_ORIGEM
+    set_clause = ", ".join(f"{col} = %s" for col in colunas)
+    valores = [data.get(col) for col in colunas]
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            UPDATE produtos
+            SET {set_clause},
+                fase_atual = 'concluido',
+                tokens_utilizados = %s,
+                tokens_cache_gravados = %s,
+                tokens_cache_lidos = %s,
+                atualizado_em = now()
+            WHERE ean = %s
+            RETURNING id
+            """,
+            valores + [usage["tokens"], usage["cache_creation"], usage["cache_read"], ean],
+        )
+        produto_id = cur.fetchone()[0]
+        registrar_versao_historico(cur, produto_id, ean, "concluido", data, usage)
+    conn.commit()
+
+
+def registrar_versao_historico(cur, produto_id, ean, fase_resultado, data, usage):
+    """
+    Grava a versão que acabou de ser calculada em produtos_historico - não a
+    anterior, a nova. Toda chamada de salvar_resultado grava uma linha aqui,
+    inclusive a primeira vez que um EAN é enriquecido - assim a tabela
+    sozinha já é a timeline completa do produto (mais recente primeiro),
+    sem precisar combinar com o estado atual de produtos pra montar uma
+    tela. Sem acumulação em lugar nenhum: tokens_* aqui, e em produtos, são
+    sempre o gasto desta chamada específica - cada linha (e o estado atual
+    de produtos) é uma foto de uma versão, nunca um total histórico.
+    """
+    colunas = RESULT_COLUMNS + VALIDACAO_COLUMNS + COLUNAS_ORIGEM
+    valores = [data.get(col) for col in colunas]
+    cur.execute(
+        f"""
+        INSERT INTO produtos_historico
+            (produto_id, ean, fase_resultado, {', '.join(colunas)},
+             tokens_utilizados, tokens_cache_gravados, tokens_cache_lidos)
+        VALUES (%s, %s, %s, {', '.join(['%s'] * len(colunas))}, %s, %s, %s)
+        """,
+        [produto_id, ean, fase_resultado] + valores
+        + [usage["tokens"], usage["cache_creation"], usage["cache_read"]],
+    )
+
+
+def buscar_ja_ok_nao_cmed(conn, eans=None, limit=None):
+    """
+    Produtos já concluídos mas não confirmados pela CMED - usado pelo modo
+    --reconciliar-cmed de enrich_com_crawler.py pra revisitar só esses.
+    """
+    with conn.cursor() as cur:
+        if eans:
+            cur.execute(
+                """
+                SELECT ean, nome_produto FROM produtos
+                WHERE ean = ANY(%s) AND fase_atual = 'concluido'
+                  AND confirmado_anvisa_cmed IS DISTINCT FROM 'Sim'
+                ORDER BY ean
+                """,
+                (list(eans),),
+            )
+        else:
+            query = (
+                "SELECT ean, nome_produto FROM produtos "
+                "WHERE fase_atual = 'concluido' "
+                "AND confirmado_anvisa_cmed IS DISTINCT FROM 'Sim' ORDER BY ean"
+            )
+            params = []
+            if limit is not None:
+                query += " LIMIT %s"
+                params.append(limit)
+            cur.execute(query, params)
+        return cur.fetchall()
+
+
+def promover_cmed(conn, ean, data, usage=None):
+    """
+    Promove um produto pra fonte oficial CMED sem tocar fase_atual (já está
+    'concluido') - só usado pelo modo --reconciliar-cmed.
+    """
+    usage = usage or {"tokens": 0, "cache_creation": 0, "cache_read": 0}
+    colunas = RESULT_COLUMNS + VALIDACAO_COLUMNS + COLUNAS_ORIGEM
+    set_clause = ", ".join(f"{col} = %s" for col in colunas)
+    valores = [data.get(col) for col in colunas]
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            UPDATE produtos
+            SET {set_clause}, tokens_utilizados = %s, atualizado_em = now()
+            WHERE ean = %s
+            """,
+            valores + [usage["tokens"], ean],
+        )
+    conn.commit()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--input", default="eans_estoque_sem_venda_12m.xlsx", help="Excel de entrada"
-    )
-    parser.add_argument(
-        "--output",
-        default=None,
-        help="Excel de saída (padrão: sobrescreve o arquivo de entrada)",
-    )
     parser.add_argument(
         "--model",
         default="claude-haiku-4-5-20251001",
         help="Model ID a usar (padrão: claude-haiku-4-5-20251001)",
     )
     parser.add_argument(
-        "--start-row", type=int, default=0, help="Índice da primeira linha a processar"
+        "--eans",
+        default=None,
+        help="Lista de EANs específicos a (re)processar, separados por vírgula (ignora a fase atual)",
     )
     parser.add_argument(
-        "--limit", type=int, default=None, help="Número máximo de linhas a processar"
+        "--limit", type=int, default=None, help="Número máximo de linhas pendentes a processar"
     )
     parser.add_argument(
         "--sleep",
         type=float,
         default=1.0,
         help="Segundos de espera antes de cada chamada, por worker (padrão: 1.0)",
-    )
-    parser.add_argument(
-        "--checkpoint-every",
-        type=int,
-        default=10,
-        help="Salva o arquivo de saída a cada N linhas processadas",
     )
     parser.add_argument(
         "--concurrency",
@@ -2074,102 +2254,68 @@ def main():
             "arquivo enrich_produtos.py."
         )
 
-    output_path = args.output or args.input
-
-    print(f"Lendo {args.input}...")
-    df = pd.read_excel(args.input)
-
-    legacy_presentes = [c for c in LEGACY_COLUMNS if c in df.columns]
-    if legacy_presentes:
-        df = df.drop(columns=legacy_presentes)
-        print(f"Colunas legadas removidas: {', '.join(legacy_presentes)}")
-
-    for col in RESULT_COLUMNS + VALIDACAO_COLUMNS + [STATUS_COLUMN]:
-        if col not in df.columns:
-            df[col] = None
-        # garante dtype "object" (texto) mesmo se a coluna já existir como
-        # float64 (ex: coluna criada vazia em uma execução anterior)
-        df[col] = df[col].astype("object")
-
-    for col in (TOKENS_COLUMN, CACHE_CREATION_COLUMN, CACHE_READ_COLUMN):
-        if col not in df.columns:
-            df[col] = 0
-        df[col] = df[col].fillna(0).astype(int)
-
-    # ordem fixa: colunas de entrada originais primeiro, depois os campos de
-    # enriquecimento sempre na mesma sequência (evita bagunça entre execuções)
-    tail_cols = [STATUS_COLUMN, TOKENS_COLUMN, CACHE_CREATION_COLUMN, CACHE_READ_COLUMN]
-    enrich_cols = RESULT_COLUMNS + VALIDACAO_COLUMNS
-    entrada_cols = [c for c in df.columns if c not in enrich_cols + tail_cols]
-    df = df[entrada_cols + enrich_cols + tail_cols]
+    eans_filtro = None
+    if args.eans:
+        eans_filtro = [e.strip() for e in args.eans.split(",") if e.strip()]
 
     client = Anthropic()
+    conn = conectar()
+    try:
+        pendentes = buscar_pendentes(conn, eans=eans_filtro, limit=args.limit)
+        total = len(pendentes)
+        print(f"{total} produto(s) pendente(s) na tabela produtos.")
 
-    end_row = len(df) if args.limit is None else min(len(df), args.start_row + args.limit)
+        def worker(ean, nome_produto):
+            nome_busca = nome_para_busca(nome_produto)
+            time.sleep(args.sleep)  # espaça o início de cada chamada dentro do worker
+            data, usage = call_model(
+                client,
+                args.model,
+                ean,
+                nome_busca,
+                verify_images=args.verify_images,
+                verify_tarja=not args.sem_verificar_tarja,
+            )
+            return ean, nome_busca, data, usage
 
-    # resume: pula linhas já processadas com sucesso ou já marcadas
-    pending = [
-        idx
-        for idx in range(args.start_row, end_row)
-        if df.iloc[idx].get(STATUS_COLUMN) not in (STATUS_OK, STATUS_NOT_FOUND)
-    ]
-    total = len(pending)
-    print(f"{total} linha(s) pendente(s) de {end_row - args.start_row} no intervalo selecionado.")
+        processed = 0
+        total_tokens_geral = 0
+        total_cache_read = 0
+        total_cache_creation = 0
+        with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
+            futures = {
+                pool.submit(worker, ean, nome_produto): ean for ean, nome_produto in pendentes
+            }
 
-    def worker(idx):
-        row = df.iloc[idx]
-        ean = row["EAN"]
-        nome_produto = nome_para_busca(row["Nome do produto"])
-        time.sleep(args.sleep)  # espaça o início de cada chamada dentro do worker
-        data, usage = call_model(
-            client,
-            args.model,
-            ean,
-            nome_produto,
-            verify_images=args.verify_images,
-            verify_tarja=not args.sem_verificar_tarja,
+            # salvar_resultado só acontece aqui na thread principal - seguro
+            for future in as_completed(futures):
+                ean, nome_produto, data, usage = future.result()
+                salvar_resultado(conn, ean, data, usage)
+                processed += 1
+                total_tokens_geral += usage["tokens"]
+                total_cache_read += usage["cache_read"]
+                total_cache_creation += usage["cache_creation"]
+
+                status = STATUS_OK if data and data.get("titulo") else STATUS_NOT_FOUND
+                cache_info = (
+                    f"cache: +{usage['cache_read']} lidos, "
+                    f"+{usage['cache_creation']} gravados"
+                )
+                revisao = ""
+                if data and data.get(VALIDACAO_HUMANA_COLUMN) == "Sim":
+                    revisao = " | REVISÃO HUMANA"
+                print(
+                    f"[{processed}/{total}] EAN {ean} - {nome_produto} -> {status} "
+                    f"({usage['tokens']} tokens | {cache_info}{revisao})"
+                )
+
+        print(
+            f"Concluído. {total_tokens_geral} tokens usados nesta execução "
+            f"({total_cache_read} lidos do cache, {total_cache_creation} gravados no "
+            f"cache)."
         )
-        return idx, ean, nome_produto, data, usage
-
-    processed = 0
-    total_tokens_geral = 0
-    total_cache_read = 0
-    total_cache_creation = 0
-    with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
-        futures = {pool.submit(worker, idx): idx for idx in pending}
-
-        # apply_result/to_excel só acontecem aqui na thread principal - seguro
-        for future in as_completed(futures):
-            idx, ean, nome_produto, data, usage = future.result()
-            apply_result(df, idx, data, usage)
-            processed += 1
-            total_tokens_geral += usage["tokens"]
-            total_cache_read += usage["cache_read"]
-            total_cache_creation += usage["cache_creation"]
-
-            status = df.at[idx, STATUS_COLUMN]
-            cache_info = (
-                f"cache: +{usage['cache_read']} lidos, "
-                f"+{usage['cache_creation']} gravados"
-            )
-            revisao = ""
-            if data and data.get(VALIDACAO_HUMANA_COLUMN) == "Sim":
-                revisao = " | REVISÃO HUMANA"
-            print(
-                f"[{processed}/{total}] EAN {ean} - {nome_produto} -> {status} "
-                f"({usage['tokens']} tokens | {cache_info}{revisao})"
-            )
-
-            if processed % args.checkpoint_every == 0:
-                df.to_excel(output_path, index=False)
-                print(f"  -> checkpoint salvo em {output_path} ({processed}/{total})")
-
-    df.to_excel(output_path, index=False)
-    print(
-        f"Concluído. {total_tokens_geral} tokens usados nesta execução "
-        f"({total_cache_read} lidos do cache, {total_cache_creation} gravados no "
-        f"cache). Resultado salvo em {output_path}"
-    )
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

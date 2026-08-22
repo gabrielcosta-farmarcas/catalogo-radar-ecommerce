@@ -1,6 +1,6 @@
 """
-Enriquece eans_estoque_sem_venda_12m.xlsx em 5 camadas, da mais barata pra
-mais cara:
+Enriquece produtos pendentes da tabela `produtos` (Postgres, ver db.py) em 5
+camadas, da mais barata pra mais cara:
 0. Tabela `anvisa_medicamentos` (base oficial da ANVISA/CMED, carregada por
    carregar_cmed.py) - se o EAN está lá, o produto É medicamento com certeza
    (fonte oficial, sem ambiguidade) e os dados vêm direto da tabela; só
@@ -32,12 +32,14 @@ como RX, entra na mesma fila se a tarja não veio do bulário (Sara). Crawler
 com tarja só de farmácia (não Sara) também entra nessa fila. CMED, IQVIA
 como MIP e crawler com tarja do Sara não entram.
 
+Lê e grava os produtos pendentes direto na tabela `produtos` do Postgres
+(ver db.py) - não usa mais planilha como banco de trabalho.
+
 Uso básico:
     python enrich_com_crawler.py
 
 Uso com opções:
-    python enrich_com_crawler.py --input eans_estoque_sem_venda_12m.xlsx \
-        --limit 20 --checkpoint-every 5
+    python enrich_com_crawler.py --eans 7891234567890,7899876543210 --limit 20
 
 Requer ANTHROPIC_API_KEY configurada (já tratado por enrich_produtos.py).
 """
@@ -49,8 +51,6 @@ import re
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-import pandas as pd
 
 from crawler.adapters.araujo import AraujoAdapter
 from crawler.adapters.drogal import DrogalAdapter
@@ -126,6 +126,11 @@ def _consolidar_resultados(ean, brutos):
         achou_campo = False
         for campo, valor in vars(r).items():
             if campo in ("ean", "ean_conferido") or not valor:
+                continue
+            # sites às vezes devolvem link/asset de mockup/placeholder
+            # (ex: sara_mockup.webp) em vez de um dado real do produto -
+            # nunca gravar isso na base, seja qual for o campo ou adapter
+            if isinstance(valor, str) and "mockup" in valor.lower():
                 continue
             achou_campo = True
             if campo == "name":
@@ -321,6 +326,7 @@ def mapear_para_schema(resultado, fontes, client, model):
         "departamento": formatados.get("departamento"),
         "categoria": formatados.get("categoria"),
         "subcategoria": formatados.get("subcategoria"),
+        "origem_categorizacao": "ia",  # crawler não tem de-para ainda
         "imagem_url": resultado.get("image1"),
         "pagina_produto_url": resultado.get("url"),
         # mesmo quando o crawler acha o produto, título/categoria/descrição
@@ -337,6 +343,7 @@ def mapear_para_schema(resultado, fontes, client, model):
     # categoria/subcategoria se a combinação não existir na árvore oficial -
     # rede de segurança contra a classificação acima ter errado
     data = ep.apply_safety_checks(data, resultado.get("ean"))
+    data["model"] = model
     return ep.marcar_validacao_humana(data), usage
 
 
@@ -457,6 +464,10 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
     if medicamento["tipo_produto"] == "Fitoterápico":
         categoria_bruta = f"{categoria_bruta} (tipo_produto CMED: Fitoterápico)"
 
+    # de-para revisado por humano (ver mapear_categorias_cmed.py) tem
+    # prioridade sobre a categorização da IA - mesma lógica do caminho IQVIA
+    categoria_mapeada = cmed.buscar_categoria_mapeada(categoria_bruta)
+
     # só pra texto comercial (descricao_curta) - tarja/registro_ms já são
     # verdade absoluta pela CMED, então não precisa do critério de
     # confiança (eh_confiavel) nem da varredura completa das 9 farmácias:
@@ -497,10 +508,14 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
         "principios_ativos": principios_ativos,
         "descricao_curta": formatados.get("descricao_curta"),
         "frase_obrigatoria": None,
-        "departamento": formatados.get("departamento"),
-        "categoria": formatados.get("categoria"),
-        "subcategoria": formatados.get("subcategoria"),
-        "imagem_url": None,
+        "departamento": categoria_mapeada["departamento"] if categoria_mapeada else formatados.get("departamento"),
+        "categoria": categoria_mapeada["categoria"] if categoria_mapeada else formatados.get("categoria"),
+        "subcategoria": categoria_mapeada["subcategoria"] if categoria_mapeada else formatados.get("subcategoria"),
+        "origem_categorizacao": "mapeamento_cmed" if categoria_mapeada else "ia",
+        # imagem do crawler já chamado acima pra descricao_curta - sem custo
+        # extra de token. apply_safety_checks zera se a tarja for controlada
+        # (Vermelha/Preta); "Sem Tarja"/não confirmada mantém a imagem.
+        "imagem_url": resultado_crawler.get("image1"),
         "pagina_produto_url": None,
         "origem_enriquecimento": f"{cmed.ORIGEM_ANVISA_CMED} (GGREM {medicamento['codigo_ggrem']})",
         "confirmado_anvisa_cmed": "Sim",
@@ -510,6 +525,7 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
     # categoria/subcategoria se a combinação não existir na árvore oficial -
     # rede de segurança contra a classificação acima ter errado
     data = ep.apply_safety_checks(data, ean)
+    data["model"] = model
     return ep.marcar_validacao_humana(data), usage
 
 
@@ -606,7 +622,11 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
         "departamento": formatados.get("departamento"),
         "categoria": formatados.get("categoria"),
         "subcategoria": formatados.get("subcategoria"),
-        "imagem_url": None,
+        "origem_categorizacao": "ia",  # ABCFarma não tem de-para ainda
+        # imagem do crawler já chamado acima pra descricao_curta - sem custo
+        # extra de token. apply_safety_checks zera se a tarja for controlada
+        # (Vermelha/Preta); "Sem Tarja"/não confirmada mantém a imagem.
+        "imagem_url": resultado_crawler.get("image1"),
         "pagina_produto_url": pagina_produto_url,
         "origem_enriquecimento": (
             f"{abcfarma.ORIGEM_ABCFARMA} (produto {medicamento['codigo_produto']})"
@@ -621,6 +641,7 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
     # tarja_crawler veio com tarja fora do vocabulário fechado, também é
     # zerada aqui (ALLOWED_TARJA).
     data = ep.apply_safety_checks(data, ean)
+    data["model"] = model
 
     # tarja ainda não confirmada (nem CMED, nem ABCFarma, nem crawler) -
     # última tentativa via busca dedicada na internet, mesma função e mesmo
@@ -758,6 +779,19 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
     ]
     categoria_bruta = " > ".join(partes_categoria) or None
 
+    # de-para revisado por humano (ver mapear_categorias_iqvia.py) tem
+    # prioridade sobre a categorização da IA - elimina a inconsistência de
+    # rodada pra rodada pras combinações já mapeadas. Se não achar (ou ainda
+    # não tiver sido revisada), cai no fluxo normal abaixo.
+    categoria_mapeada = iqvia.buscar_categoria_mapeada(
+        tipo_cadastro,
+        produto["area_farmacia"],
+        produto["sub_cat1"],
+        produto["sub_cat2"],
+        produto["sub_cat3"],
+        produto["sub_cat4"],
+    )
+
     formatados, usage_fmt = ep.formatar_campos_confirmados(
         client,
         model,
@@ -785,9 +819,10 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
         "principios_ativos": principios_ativos,
         "descricao_curta": formatados.get("descricao_curta"),
         "frase_obrigatoria": None,
-        "departamento": formatados.get("departamento"),
-        "categoria": formatados.get("categoria"),
-        "subcategoria": formatados.get("subcategoria"),
+        "departamento": categoria_mapeada["departamento"] if categoria_mapeada else formatados.get("departamento"),
+        "categoria": categoria_mapeada["categoria"] if categoria_mapeada else formatados.get("categoria"),
+        "subcategoria": categoria_mapeada["subcategoria"] if categoria_mapeada else formatados.get("subcategoria"),
+        "origem_categorizacao": "mapeamento_iqvia" if categoria_mapeada else "ia",
         # IQVIA não tem coluna de imagem - usa a mesma consulta ao crawler já
         # feita acima pra descricao_curta (Sara/drogasil/drogaraia, ou as 9
         # farmácias no caminho RX). apply_safety_checks cuida do resto: zera
@@ -804,6 +839,7 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
     # categoria/subcategoria se a combinação não existir na árvore oficial -
     # rede de segurança contra a classificação acima ter errado
     data = ep.apply_safety_checks(data, ean)
+    data["model"] = model
 
     # tarja de medicamento RX ainda não confirmada (nem IQVIA/MIP, nem
     # crawler) - última tentativa via busca dedicada, mesma função e mesmo
@@ -856,17 +892,13 @@ def montar_pistas_nao_confirmadas(resultado, fontes):
     return pistas
 
 
-def worker(idx, df, args):
-    row = df.iloc[idx]
-    ean = str(row["EAN"])
-    nome_produto = ep.nome_para_busca(row["Nome do produto"])
-
+def worker(ean, nome_produto, args):
     usage_total = {"tokens": 0, "cache_creation": 0, "cache_read": 0}
 
     medicamento_cmed = cmed.buscar_medicamento_anvisa(ean)
     if medicamento_cmed is not None:
         data, usage = mapear_cmed_para_schema(medicamento_cmed, ean, CLIENT, args.model)
-        return idx, ean, nome_produto, data, usage
+        return ean, nome_produto, data, usage
 
     medicamento_abcfarma = abcfarma.buscar_medicamento_abcfarma(ean)
     if medicamento_abcfarma is not None:
@@ -877,7 +909,7 @@ def worker(idx, df, args):
             args.model,
             verify_tarja=not args.sem_verificar_tarja,
         )
-        return idx, ean, nome_produto, data, usage
+        return ean, nome_produto, data, usage
 
     produto_iqvia = iqvia.buscar_produto_iqvia(ean)
     if produto_iqvia is not None:
@@ -888,13 +920,13 @@ def worker(idx, df, args):
             args.model,
             verify_tarja=not args.sem_verificar_tarja,
         )
-        return idx, ean, nome_produto, data, usage
+        return ean, nome_produto, data, usage
 
     resultado, fontes = buscar_no_crawler(ean)
 
     if eh_confiavel(resultado, fontes):
         data, usage = mapear_para_schema(resultado, fontes, CLIENT, args.model)
-        return idx, ean, nome_produto, data, usage
+        return ean, nome_produto, data, usage
 
     time.sleep(args.sleep)
     data, usage_claude = ep.call_model(
@@ -912,43 +944,40 @@ def worker(idx, df, args):
         data["origem_enriquecimento"] = "claude"
         data["confirmado_anvisa_cmed"] = "Não"
         data = ep.marcar_validacao_humana(data)
-    return idx, ean, nome_produto, data, usage_total
+    return ean, nome_produto, data, usage_total
 
 
-def worker_reconciliar(idx, df, args):
+def worker_reconciliar(ean, nome_produto, args):
     """
-    Usado só por --reconciliar-cmed: revisita uma linha JÁ marcada OK (vinda
+    Usado só por --reconciliar-cmed: revisita um produto JÁ concluído (vindo
     de crawler+claude ou claude puro, de uma execução anterior) e verifica
     se o EAN já está na tabela oficial da ANVISA hoje - a CMED é atualizada
     com o tempo, então um EAN que não estava lá numa execução passada pode
     estar agora. Só faz a consulta à CMED (grátis, sem token) - nunca cai
     pro crawler nem pro Claude, porque o objetivo aqui é só promover pra
     fonte oficial quando possível, não reprocessar do zero. Se a CMED ainda
-    não tiver o EAN, retorna data=None - o chamador deve deixar a linha
-    exatamente como está (nunca marcar "Não localizado" numa linha que já
+    não tiver o EAN, retorna data=None - o chamador deve deixar o produto
+    exatamente como está (nunca marcar "nao_localizado" num produto que já
     tinha um resultado válido de outra fonte).
     """
-    row = df.iloc[idx]
-    ean = str(row["EAN"])
-    nome_produto = ep.nome_para_busca(row["Nome do produto"])
-
     medicamento_cmed = cmed.buscar_medicamento_anvisa(ean)
     if medicamento_cmed is None:
-        return idx, ean, nome_produto, None, {"tokens": 0, "cache_creation": 0, "cache_read": 0}
+        return ean, nome_produto, None, {"tokens": 0, "cache_creation": 0, "cache_read": 0}
 
     data, usage = mapear_cmed_para_schema(medicamento_cmed, ean, CLIENT, args.model)
-    return idx, ean, nome_produto, data, usage
+    return ean, nome_produto, data, usage
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", default="eans_estoque_sem_venda_12m.xlsx")
-    parser.add_argument("--output", default=None)
     parser.add_argument("--model", default="claude-haiku-4-5-20251001")
-    parser.add_argument("--start-row", type=int, default=0)
-    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument(
+        "--eans",
+        default=None,
+        help="Lista de EANs específicos a (re)processar, separados por vírgula (ignora a fase atual)",
+    )
+    parser.add_argument("--limit", type=int, default=None, help="Número máximo de produtos pendentes a processar")
     parser.add_argument("--sleep", type=float, default=1.0)
-    parser.add_argument("--checkpoint-every", type=int, default=10)
     parser.add_argument("--concurrency", type=int, default=5)
     parser.add_argument("--verify-images", action="store_true")
     parser.add_argument("--sem-verificar-tarja", action="store_true")
@@ -956,11 +985,11 @@ def main():
         "--reconciliar-cmed",
         action="store_true",
         help=(
-            "Em vez do fluxo normal, revisita linhas já OK que não vieram da "
-            "anvisa_cmed (de execuções passadas, via crawler ou Claude) e "
-            "verifica se o EAN já está na tabela oficial hoje - promove pra "
-            "anvisa_cmed sem gastar token de crawler/Claude se achar; se não "
-            "achar, deixa a linha exatamente como está."
+            "Em vez do fluxo normal, revisita produtos já concluídos que não "
+            "vieram da anvisa_cmed (de execuções passadas, via crawler ou "
+            "Claude) e verifica se o EAN já está na tabela oficial hoje - "
+            "promove pra anvisa_cmed sem gastar token de crawler/Claude se "
+            "achar; se não achar, deixa o produto exatamente como está."
         ),
     )
     args = parser.parse_args()
@@ -972,142 +1001,100 @@ def main():
     global CLIENT
     CLIENT = ep.Anthropic()
 
-    output_path = args.output or args.input
+    eans_filtro = None
+    if args.eans:
+        eans_filtro = [e.strip() for e in args.eans.split(",") if e.strip()]
 
-    print(f"Lendo {args.input}...")
-    df = pd.read_excel(args.input)
+    conn = ep.conectar()
+    try:
+        if args.reconciliar_cmed:
+            pendentes = ep.buscar_ja_ok_nao_cmed(conn, eans=eans_filtro, limit=args.limit)
+            total = len(pendentes)
+            print(f"{total} produto(s) já concluído(s) (não vindos da CMED) pra revisitar.")
 
-    resultado_columns = ep.RESULT_COLUMNS + [
-        "origem_enriquecimento",
-        "confirmado_anvisa_cmed",
-    ] + ep.VALIDACAO_COLUMNS
-    for col in resultado_columns + [ep.STATUS_COLUMN]:
-        if col not in df.columns:
-            df[col] = None
-        df[col] = df[col].astype("object")
-    for col in (ep.TOKENS_COLUMN, ep.CACHE_CREATION_COLUMN, ep.CACHE_READ_COLUMN):
-        if col not in df.columns:
-            df[col] = 0
-        df[col] = df[col].fillna(0).astype(int)
+            processed = 0
+            promovidas = 0
+            tokens_gastos = 0
+            with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
+                futures = {
+                    pool.submit(worker_reconciliar, ean, nome_produto, args): ean
+                    for ean, nome_produto in pendentes
+                }
+                for future in as_completed(futures):
+                    ean, nome_produto, data, usage = future.result()
+                    processed += 1
+                    tokens_gastos += usage["tokens"]
 
-    tail_cols = [ep.STATUS_COLUMN, ep.TOKENS_COLUMN, ep.CACHE_CREATION_COLUMN, ep.CACHE_READ_COLUMN]
-    entrada_cols = [c for c in df.columns if c not in resultado_columns + tail_cols]
-    df = df[entrada_cols + resultado_columns + tail_cols]
+                    if data is None:
+                        print(f"[{processed}/{total}] EAN {ean} - {nome_produto} -> sem atualização (CMED ainda não tem)")
+                    else:
+                        ep.promover_cmed(conn, ean, data, usage)
+                        promovidas += 1
+                        print(f"[{processed}/{total}] EAN {ean} - {nome_produto} -> promovida pra anvisa_cmed "
+                              f"({usage['tokens']} tokens)")
 
-    end_row = len(df) if args.limit is None else min(len(df), args.start_row + args.limit)
+            print(
+                f"Concluído. {promovidas} produto(s) promovido(s) pra anvisa_cmed "
+                f"({tokens_gastos} tokens gastos, só nos promovidos)."
+            )
+            return
 
-    if args.reconciliar_cmed:
-        pending = [
-            idx
-            for idx in range(args.start_row, end_row)
-            if df.iloc[idx].get(ep.STATUS_COLUMN) == ep.STATUS_OK
-            and df.iloc[idx].get("confirmado_anvisa_cmed") != "Sim"
-        ]
-        total = len(pending)
-        print(
-            f"{total} linha(s) já OK (não vindas da CMED) pra revisitar de "
-            f"{end_row - args.start_row} no intervalo selecionado."
-        )
+        pendentes = ep.buscar_pendentes(conn, eans=eans_filtro, limit=args.limit)
+        total = len(pendentes)
+        print(f"{total} produto(s) pendente(s) na tabela produtos.")
 
         processed = 0
-        promovidas = 0
-        tokens_gastos = 0
+        origem_counts = {"anvisa_cmed": 0, "abcfarma": 0, "crawler+claude": 0, "claude": 0}
+        tokens_por_origem = {"anvisa_cmed": 0, "abcfarma": 0, "crawler+claude": 0, "claude": 0}
+        revisao_humana = 0
         with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
-            futures = {pool.submit(worker_reconciliar, idx, df, args): idx for idx in pending}
+            futures = {
+                pool.submit(worker, ean, nome_produto, args): ean
+                for ean, nome_produto in pendentes
+            }
             for future in as_completed(futures):
-                idx, ean, nome_produto, data, usage = future.result()
+                ean, nome_produto, data, usage = future.result()
+                ep.salvar_resultado(conn, ean, data, usage)
+
+                origem = "claude"
+                status = ep.STATUS_NOT_FOUND
+                if data is not None and data.get("titulo"):
+                    status = ep.STATUS_OK
+                    origem_bruta = str(data.get("origem_enriquecimento", ""))
+                    if origem_bruta.startswith(cmed.ORIGEM_ANVISA_CMED):
+                        origem = "anvisa_cmed"
+                    elif origem_bruta.startswith(abcfarma.ORIGEM_ABCFARMA):
+                        origem = "abcfarma"
+                    elif origem_bruta.startswith("crawler"):
+                        origem = "crawler+claude"
+                    else:
+                        origem = "claude"
+                    origem_counts[origem] += 1
+                    if data.get(ep.VALIDACAO_HUMANA_COLUMN) == "Sim":
+                        revisao_humana += 1
+
+                tokens_por_origem[origem] += usage["tokens"]
+
                 processed += 1
-                tokens_gastos += usage["tokens"]
+                revisao = ""
+                if data and data.get(ep.VALIDACAO_HUMANA_COLUMN) == "Sim":
+                    revisao = " | REVISÃO HUMANA"
+                print(f"[{processed}/{total}] EAN {ean} - {nome_produto} -> {status} "
+                      f"({data.get('origem_enriquecimento') if data else '-'} | {usage['tokens']} tokens{revisao})")
 
-                if data is None:
-                    print(f"[{processed}/{total}] EAN {ean} - {nome_produto} -> sem atualização (CMED ainda não tem)")
-                else:
-                    for col in resultado_columns:
-                        df.at[idx, col] = data.get(col)
-                    df.at[idx, ep.TOKENS_COLUMN] += usage["tokens"]
-                    promovidas += 1
-                    print(f"[{processed}/{total}] EAN {ean} - {nome_produto} -> promovida pra anvisa_cmed "
-                          f"({usage['tokens']} tokens)")
-
-                if processed % args.checkpoint_every == 0:
-                    df.to_excel(output_path, index=False)
-                    print(f"  -> checkpoint salvo em {output_path} ({processed}/{total})")
-
-        df.to_excel(output_path, index=False)
         print(
-            f"Concluído. {promovidas} linha(s) promovida(s) pra anvisa_cmed "
-            f"({tokens_gastos} tokens gastos, só nas promovidas). "
-            f"Resultado salvo em {output_path}"
+            f"Concluído. {origem_counts['anvisa_cmed']} via anvisa_cmed "
+            f"({tokens_por_origem['anvisa_cmed']} tokens, tabela oficial ANVISA - sem busca, sem dupla verificação de tarja), "
+            f"{origem_counts['abcfarma']} via abcfarma "
+            f"({tokens_por_origem['abcfarma']} tokens, tabela ABCFarma - sem busca, tarja pendente de validação humana), "
+            f"{origem_counts['crawler+claude']} via crawler+claude "
+            f"({tokens_por_origem['crawler+claude']} tokens, só título/categoria/descrição - sem busca), "
+            f"{origem_counts['claude']} via Claude puro "
+            f"({tokens_por_origem['claude']} tokens, com busca agentic completa, "
+            f"{revisao_humana} medicamento(s) na fila de validação humana)."
         )
-        return
-
-    pending = [
-        idx
-        for idx in range(args.start_row, end_row)
-        if df.iloc[idx].get(ep.STATUS_COLUMN) not in (ep.STATUS_OK, ep.STATUS_NOT_FOUND)
-    ]
-    total = len(pending)
-    print(f"{total} linha(s) pendente(s) de {end_row - args.start_row} no intervalo selecionado.")
-
-    processed = 0
-    origem_counts = {"anvisa_cmed": 0, "abcfarma": 0, "crawler+claude": 0, "claude": 0}
-    tokens_por_origem = {"anvisa_cmed": 0, "abcfarma": 0, "crawler+claude": 0, "claude": 0}
-    revisao_humana = 0
-    with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
-        futures = {pool.submit(worker, idx, df, args): idx for idx in pending}
-        for future in as_completed(futures):
-            idx, ean, nome_produto, data, usage = future.result()
-
-            origem = "claude"
-            if data is None or not data.get("titulo"):
-                df.at[idx, ep.STATUS_COLUMN] = ep.STATUS_NOT_FOUND
-            else:
-                for col in resultado_columns:
-                    df.at[idx, col] = data.get(col)
-                df.at[idx, ep.STATUS_COLUMN] = ep.STATUS_OK
-                origem_bruta = str(data.get("origem_enriquecimento", ""))
-                if origem_bruta.startswith(cmed.ORIGEM_ANVISA_CMED):
-                    origem = "anvisa_cmed"
-                elif origem_bruta.startswith(abcfarma.ORIGEM_ABCFARMA):
-                    origem = "abcfarma"
-                elif origem_bruta.startswith("crawler"):
-                    origem = "crawler+claude"
-                else:
-                    origem = "claude"
-                origem_counts[origem] += 1
-                if data.get(ep.VALIDACAO_HUMANA_COLUMN) == "Sim":
-                    revisao_humana += 1
-
-            tokens_por_origem[origem] += usage["tokens"]
-            df.at[idx, ep.TOKENS_COLUMN] = usage["tokens"]
-            df.at[idx, ep.CACHE_CREATION_COLUMN] = usage["cache_creation"]
-            df.at[idx, ep.CACHE_READ_COLUMN] = usage["cache_read"]
-
-            processed += 1
-            status = df.at[idx, ep.STATUS_COLUMN]
-            revisao = ""
-            if data and data.get(ep.VALIDACAO_HUMANA_COLUMN) == "Sim":
-                revisao = " | REVISÃO HUMANA"
-            print(f"[{processed}/{total}] EAN {ean} - {nome_produto} -> {status} "
-                  f"({data.get('origem_enriquecimento') if data else '-'} | {usage['tokens']} tokens{revisao})")
-
-            if processed % args.checkpoint_every == 0:
-                df.to_excel(output_path, index=False)
-                print(f"  -> checkpoint salvo em {output_path} ({processed}/{total})")
-
-    df.to_excel(output_path, index=False)
-    print(
-        f"Concluído. {origem_counts['anvisa_cmed']} via anvisa_cmed "
-        f"({tokens_por_origem['anvisa_cmed']} tokens, tabela oficial ANVISA - sem busca, sem dupla verificação de tarja), "
-        f"{origem_counts['abcfarma']} via abcfarma "
-        f"({tokens_por_origem['abcfarma']} tokens, tabela ABCFarma - sem busca, tarja pendente de validação humana), "
-        f"{origem_counts['crawler+claude']} via crawler+claude "
-        f"({tokens_por_origem['crawler+claude']} tokens, só título/categoria/descrição - sem busca), "
-        f"{origem_counts['claude']} via Claude puro "
-        f"({tokens_por_origem['claude']} tokens, com busca agentic completa, "
-        f"{revisao_humana} medicamento(s) na fila de validação humana). "
-        f"Resultado salvo em {output_path}"
-    )
+    finally:
+        conn.close()
 
 
 if __name__ == "__main__":

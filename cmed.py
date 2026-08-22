@@ -97,3 +97,33 @@ def buscar_medicamento_anvisa(ean):
     if row is None:
         return None
     return dict(zip(CAMPOS, row))
+
+
+def buscar_categoria_mapeada(categoria_bruta):
+    """
+    Consulta mapeamento_categoria_cmed (ver mapear_categorias_cmed.py) por
+    uma categoria_bruta (classe_terapeutica, com sufixo de fitoterápico
+    quando aplicável) já revisada por humano. Retorna
+    {"departamento", "categoria", "subcategoria"} (valores podem ser None,
+    se a revisão confirmou que nenhuma categoria da árvore se aplica) ou
+    None se a categoria_bruta não existir na tabela ou ainda não tiver sido
+    revisada - nesse caso o chamador deve cair no fluxo normal (perguntar
+    pro Claude, como já faz hoje).
+    """
+    if not categoria_bruta:
+        return None
+    with conectar() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT departamento, categoria, subcategoria
+                FROM mapeamento_categoria_cmed
+                WHERE categoria_bruta = %s AND revisado_humanamente = true
+                """,
+                (categoria_bruta,),
+            )
+            row = cur.fetchone()
+
+    if row is None:
+        return None
+    return {"departamento": row[0], "categoria": row[1], "subcategoria": row[2]}

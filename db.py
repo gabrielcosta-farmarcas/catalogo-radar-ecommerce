@@ -1,56 +1,32 @@
 """
-Camada de banco de dados pra gerenciar o fluxo de enriquecimento via Batch API,
-em etapas. Módulo isolado de propósito - não importa nem é importado por
-enrich_produtos.py / enrich_com_crawler.py, pra não acoplar o fluxo em tempo
-real (que já funciona) com o fluxo em lote (que ainda está em experimentação).
-Importa só `cmed` (consulta à tabela oficial da ANVISA) - isso não fere o
-isolamento, é só acesso a dado, não acopla com o fluxo de enriquecimento em
-tempo real.
+Camada de banco de dados da tabela `produtos` - 1 linha por EAN, com o estado
+atual do fluxo (`fase_atual`) e o resultado final do enriquecimento (o que
+antes era o xlsx). Módulo isolado de propósito - não importa nem é importado
+por enrich_produtos.py / enrich_com_crawler.py (que têm sua própria conexão e
+seus próprios helpers pra ler/escrever em `produtos`, ver DB_CONFIG em
+enrich_produtos.py).
 
-3 tabelas:
-- produtos: 1 linha por EAN - estado atual e resultado final (o que hoje é o
-  xlsx).
-- batches: 1 linha por lote submetido à Batch API da Anthropic - o lote tem
-  ciclo de vida próprio (id, status, criado em X, processado em Y),
-  compartilhado por até 100 mil EANs de uma vez.
-- batch_items: ponte entre as duas - resolve o problema de que os resultados
-  da Batch API voltam FORA DE ORDEM, identificados só por um custom_id, e
-  permite um mesmo EAN aparecer em mais de um batch (fase 1: enriquecimento;
-  fase 3: verificação de tarja).
+Fluxo de fases de `produtos.fase_atual`:
+    pendente -> concluido | nao_localizado
 
-Fluxo de fases de `produtos.fase_atual` (nesta ordem):
-    aguardando_cmed -> aguardando_crawler -> aguardando_batch_enriquecimento
-                                                              |
-                     aguardando_batch_formatacao <-----------+ (se achou na CMED)
-                                  |                           |
-                                  +-----------> aguardando_batch_tarja (só se NÃO veio da CMED)
-                                                              |
-                                                          concluido | nao_localizado
-
-Se o EAN está na tabela `anvisa_medicamentos` (CMED/ANVISA), é tratado como verdade
-absoluta: tipo_cadastro, registro_ms, fabricante, generico e tarja vêm direto
-de lá, sem precisar da fase de verificação de tarja (`aguardando_batch_tarja`)
-- só falta uma formatação leve de título/composição/categoria
-(`aguardando_batch_formatacao`). Ver `verificar_cmed()`.
+A verificação contra a CMED/ANVISA acontece dentro do próprio fluxo em tempo
+real (enrich_com_crawler.mapear_cmed_para_schema), não aqui - esse módulo só
+gerencia a fila de EANs pendentes e o resultado final.
 
 Uso básico:
     python db.py criar-tabelas
     python db.py carregar-eans eans_estoque_sem_venda_12m.xlsx
-    python db.py verificar-cmed
+    python db.py status
 
 Requer Postgres rodando (docker-compose up -d) e psycopg2-binary instalado.
 """
 
 import argparse
-import json
 import os
-import sys
 
 import pandas as pd
 import psycopg2
 import psycopg2.extras
-
-import cmed
 
 DB_CONFIG = {
     "host": os.environ.get("PG_HOST", "localhost"),
@@ -67,7 +43,8 @@ def conectar():
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS produtos (
-    ean                     TEXT PRIMARY KEY,
+    id                      BIGSERIAL PRIMARY KEY,
+    ean                     TEXT UNIQUE NOT NULL,
     nome_produto            TEXT NOT NULL,
 
     -- resultado final (mesmo schema do xlsx, mesma ordem de RESULT_COLUMNS)
@@ -78,78 +55,144 @@ CREATE TABLE IF NOT EXISTS produtos (
     registro_ms             TEXT,
     generico                TEXT,
     tarja                   TEXT,
+    precisa_retencao_receita TEXT,
     principios_ativos       TEXT,
     descricao_curta         TEXT,
     frase_obrigatoria       TEXT,
     departamento            TEXT,
     categoria               TEXT,
     subcategoria            TEXT,
+    origem_categorizacao    TEXT,  -- mapeamento_iqvia | mapeamento_cmed (de-para revisado) | ia (decisão da IA)
     imagem_url              TEXT,
     pagina_produto_url      TEXT,
+    preco_pesquisado        TEXT,
+    data_pesquisa           TEXT,
     origem_enriquecimento   TEXT,  -- anvisa_cmed (GGREM ...) | crawler+claude (sites) | claude
     confirmado_anvisa_cmed  TEXT,  -- Sim | Não - mesmo sentido da coluna equivalente no xlsx
     precisa_validacao_humana TEXT,  -- Sim | Não - medicamento achado só via Claude/web
     mensagem_validacao_humana TEXT, -- texto pra fila humana; null quando Não
 
     -- estado geral do fluxo
-    fase_atual              TEXT NOT NULL DEFAULT 'aguardando_cmed',
-    -- aguardando_cmed | aguardando_crawler | aguardando_batch_enriquecimento |
-    -- aguardando_batch_formatacao | aguardando_batch_tarja | concluido | nao_localizado
+    fase_atual              TEXT NOT NULL DEFAULT 'pendente',
+    -- pendente | concluido | nao_localizado
 
-    precisa_verificar_tarja BOOLEAN,  -- false quando confirmado_anvisa_cmed=Sim (tarja ja e verdade absoluta)
-
-    -- resultado da tabela oficial da ANVISA (fase -1, sincrono, sem custo de
-    -- token, verdade absoluta quando achar - ver verificar_cmed())
-    status_cmed             TEXT NOT NULL DEFAULT 'pendente',  -- pendente | achou | nao_achou
-    dados_cmed              JSONB,                              -- linha da tabela anvisa_medicamentos, se achou
-
-    -- resultado do crawler (fase 0, sincrono, sem custo de token)
-    status_crawler          TEXT NOT NULL DEFAULT 'pendente',  -- pendente | achou | nao_achou
-    fontes_crawler          TEXT,                               -- ex: "drogasil,pacheco"
-    dados_crawler           JSONB,                               -- ProductResult consolidado
-
+    model                   TEXT,  -- model ID da Anthropic que gerou esta versão (ex: claude-haiku-4-5-20251001)
     tokens_utilizados       INTEGER NOT NULL DEFAULT 0,
     tokens_cache_gravados   INTEGER NOT NULL DEFAULT 0,
     tokens_cache_lidos      INTEGER NOT NULL DEFAULT 0,
 
+    -- timestamps sempre por último, por convenção
     criado_em               TIMESTAMPTZ NOT NULL DEFAULT now(),
     atualizado_em           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE IF NOT EXISTS batches (
-    id                    SERIAL PRIMARY KEY,
-    batch_id_anthropic    TEXT UNIQUE NOT NULL,  -- id retornado por client.messages.batches.create
-    fase                  TEXT NOT NULL,          -- enriquecimento | tarja
-    status                TEXT NOT NULL DEFAULT 'em_andamento',  -- em_andamento | concluido | erro
-    total_requests        INTEGER NOT NULL DEFAULT 0,
-    criado_em             TIMESTAMPTZ NOT NULL DEFAULT now(),
-    concluido_em          TIMESTAMPTZ
-);
-
-CREATE TABLE IF NOT EXISTS batch_items (
-    id           SERIAL PRIMARY KEY,
-    batch_id     INTEGER NOT NULL REFERENCES batches(id),
-    ean          TEXT NOT NULL REFERENCES produtos(ean),
-    custom_id    TEXT NOT NULL,   -- o custom_id usado na requisicao do batch (costuma ser o proprio EAN + fase)
-    resultado    JSONB,           -- resposta bruta desse item, depois de buscar batches.results()
-    processado   BOOLEAN NOT NULL DEFAULT false,
-    UNIQUE (batch_id, custom_id)
-);
-
 CREATE INDEX IF NOT EXISTS idx_produtos_fase ON produtos (fase_atual);
-CREATE INDEX IF NOT EXISTS idx_batch_items_batch ON batch_items (batch_id);
+
+-- timeline de versões de cada produto - uma linha por vez que ele foi
+-- enriquecido (inclusive a primeira), gravada pelo próprio código Python em
+-- enrich_produtos.salvar_resultado (não por trigger - decisão deliberada de
+-- manter regra de negócio na aplicação, não no banco). Tabela sozinha já é
+-- a timeline completa pra tela de acompanhamento - não precisa combinar com
+-- o estado atual de produtos.
+CREATE TABLE IF NOT EXISTS produtos_historico (
+    id                        BIGSERIAL PRIMARY KEY,
+    produto_id                BIGINT NOT NULL REFERENCES produtos(id),
+    ean                       TEXT NOT NULL,
+    fase_resultado            TEXT NOT NULL,  -- concluido | nao_localizado - resultado desta versão
+
+    titulo                    TEXT,
+    marca                     TEXT,
+    fabricante                TEXT,
+    tipo_cadastro             TEXT,
+    registro_ms               TEXT,
+    generico                  TEXT,
+    tarja                     TEXT,
+    precisa_retencao_receita  TEXT,
+    principios_ativos         TEXT,
+    descricao_curta           TEXT,
+    frase_obrigatoria         TEXT,
+    departamento              TEXT,
+    categoria                 TEXT,
+    subcategoria              TEXT,
+    origem_categorizacao      TEXT,
+    imagem_url                TEXT,
+    pagina_produto_url        TEXT,
+    preco_pesquisado          TEXT,
+    data_pesquisa             TEXT,
+    origem_enriquecimento     TEXT,
+    confirmado_anvisa_cmed    TEXT,
+    precisa_validacao_humana  TEXT,
+    mensagem_validacao_humana TEXT,
+
+    model                     TEXT,  -- model ID da Anthropic que gerou esta versão
+    tokens_utilizados         INTEGER NOT NULL DEFAULT 0,
+    tokens_cache_gravados     INTEGER NOT NULL DEFAULT 0,
+    tokens_cache_lidos        INTEGER NOT NULL DEFAULT 0,
+
+    versionado_em             TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_produtos_historico_ean ON produtos_historico (ean);
 """
 
 # pra tabelas criadas antes da integração com a CMED - SCHEMA_SQL acima só
 # cria colunas em tabela nova (CREATE TABLE IF NOT EXISTS não altera uma
 # tabela já existente). Tudo idempotente, seguro rodar de novo.
 MIGRACOES_SQL = """
-ALTER TABLE produtos ADD COLUMN IF NOT EXISTS status_cmed TEXT NOT NULL DEFAULT 'pendente';
-ALTER TABLE produtos ADD COLUMN IF NOT EXISTS dados_cmed JSONB;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS confirmado_anvisa_cmed TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS precisa_validacao_humana TEXT;
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS mensagem_validacao_humana TEXT;
-ALTER TABLE produtos ALTER COLUMN fase_atual SET DEFAULT 'aguardando_cmed';
+ALTER TABLE produtos ALTER COLUMN fase_atual SET DEFAULT 'pendente';
+-- renomeia o valor antigo (nome preso a uma pré-checagem de CMED que não
+-- existe mais, ver módulo verificar_cmed removido) pro nome atual
+UPDATE produtos SET fase_atual = 'pendente' WHERE fase_atual = 'aguardando_cmed';
+
+-- campos usados por enrich_produtos.py/enrich_com_crawler.py que ainda não
+-- estavam no schema (ver RESULT_COLUMNS em enrich_produtos.py)
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS precisa_retencao_receita TEXT;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS preco_pesquisado TEXT;
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS data_pesquisa TEXT;
+
+-- batches/batch_items eram o esqueleto de um fluxo em lote via Batch API que
+-- nunca foi implementado (nenhuma função lia/gravava neles) - removidas.
+DROP TABLE IF EXISTS batch_items;
+DROP TABLE IF EXISTS batches;
+
+-- id numérico como chave primária (ean fica só UNIQUE) - migração histórica,
+-- já aplicada neste banco e coberta em SCHEMA_SQL pra instalação nova. Não
+-- fica mais aqui como drop+recreate porque toda FK nova pra produtos(id)
+-- (ex: produtos_historico) passa a depender do índice de produtos_pkey, e
+-- recriá-lo a cada `criar-tabelas` quebraria essas FKs sem necessidade.
+
+-- status_crawler/fontes_crawler/dados_crawler eram placeholders pra uma fase
+-- de crawler que nunca foi implementada aqui (nenhuma função grava neles) -
+-- removidos. O crawler real (enrich_com_crawler.py) roda fora dessa máquina
+-- de fases, direto no fluxo em tempo real.
+ALTER TABLE produtos DROP COLUMN IF EXISTS status_crawler;
+ALTER TABLE produtos DROP COLUMN IF EXISTS fontes_crawler;
+ALTER TABLE produtos DROP COLUMN IF EXISTS dados_crawler;
+
+-- sinaliza se departamento/categoria/subcategoria vieram de um de-para já
+-- revisado por humano (mapeamento_categoria_iqvia/_cmed) ou de uma decisão
+-- da IA na hora (sem de-para pra essa combinação, ou fonte sem de-para
+-- ainda - ABCFarma/crawler/Claude puro)
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS origem_categorizacao TEXT;
+ALTER TABLE produtos DROP CONSTRAINT IF EXISTS produtos_origem_categorizacao_check;
+ALTER TABLE produtos ADD CONSTRAINT produtos_origem_categorizacao_check
+    CHECK (origem_categorizacao IS NULL OR origem_categorizacao IN ('mapeamento_iqvia', 'mapeamento_cmed', 'ia'));
+
+-- model ID que gerou a versão atual - ajuda a explicar divergência entre
+-- execuções (ex: troca de modelo entre um reprocessamento e outro)
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS model TEXT;
+ALTER TABLE produtos_historico ADD COLUMN IF NOT EXISTS model TEXT;
+
+-- status_cmed/dados_cmed/precisa_verificar_tarja só eram gravados por
+-- verificar_cmed() (pré-checagem grátis contra a CMED, nunca integrada ao
+-- fluxo real) - o fluxo em tempo real já faz sua própria consulta direta à
+-- CMED (mapear_cmed_para_schema) e já expõe a fonte via
+-- origem_enriquecimento, então esses 3 campos e a função foram removidos.
+ALTER TABLE produtos DROP COLUMN IF EXISTS status_cmed;
+ALTER TABLE produtos DROP COLUMN IF EXISTS dados_cmed;
+ALTER TABLE produtos DROP COLUMN IF EXISTS precisa_verificar_tarja;
 """
 
 
@@ -158,24 +201,8 @@ def criar_tabelas():
         with conn.cursor() as cur:
             cur.execute(SCHEMA_SQL)
             cur.execute(MIGRACOES_SQL)
-
-            # linhas que já existiam antes da CMED entrar no fluxo e ainda não
-            # foram tocadas pelo crawler - manda pra fase_atual=aguardando_cmed
-            # pra passarem pela verificação oficial (grátis) antes do crawler.
-            # Só afeta quem está 100% intocado (status_crawler ainda
-            # 'pendente'), então nunca sobrescreve trabalho já feito.
-            cur.execute(
-                """
-                UPDATE produtos
-                SET fase_atual = 'aguardando_cmed'
-                WHERE fase_atual = 'aguardando_crawler' AND status_crawler = 'pendente'
-                """
-            )
-            linhas_movidas = cur.rowcount
         conn.commit()
-    print("Tabelas criadas/confirmadas: produtos, batches, batch_items.")
-    if linhas_movidas:
-        print(f"{linhas_movidas} linha(s) intocada(s) movida(s) pra aguardando_cmed.")
+    print("Tabelas criadas/confirmadas: produtos.")
 
 
 def carregar_eans(caminho_xlsx):
@@ -216,115 +243,18 @@ def contar_por_fase():
                 print(f"  {fase}: {qtd}")
 
 
-def _carregar_indice_cmed():
-    """
-    Carrega a tabela anvisa_medicamentos inteira numa vez e monta um índice
-    {ean_normalizado: linha} - muito mais rápido que uma consulta por EAN
-    quando há muitas linhas pra verificar (produtos pode ter centenas de
-    milhares de linhas; a CMED tem só ~26 mil).
-    """
-    campos = cmed.CAMPOS + ("ean_1", "ean_2", "ean_3")
-    indice = {}
-    with cmed.conectar() as conn:
-        with conn.cursor() as cur:
-            cur.execute(f"SELECT {', '.join(campos)} FROM anvisa_medicamentos")
-            for linha in cur.fetchall():
-                registro = dict(zip(campos, linha))
-                for chave_ean in ("ean_1", "ean_2", "ean_3"):
-                    valor = registro.get(chave_ean)
-                    if valor:
-                        indice[valor] = registro
-    return indice
-
-
-def verificar_cmed():
-    """
-    Verifica todo produto com fase_atual='aguardando_cmed' contra a tabela
-    oficial da ANVISA (anvisa_medicamentos). Se achar, o EAN é tratado como verdade
-    absoluta: tipo_cadastro/registro_ms/fabricante/generico/tarja vêm direto
-    de lá, sem gastar token nenhum, e a fase de verificação dedicada de tarja
-    (aguardando_batch_tarja) nunca é necessária pra esse produto - só falta
-    uma formatação leve de título/composição/categoria
-    (aguardando_batch_formatacao). Se não achar, cai pra aguardando_crawler
-    (fluxo normal, sem mudança nenhuma).
-    """
-    indice = _carregar_indice_cmed()
-    print(f"{len(indice)} EAN(s) indexados da tabela anvisa_medicamentos.")
-
-    with conectar() as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT ean FROM produtos WHERE fase_atual = 'aguardando_cmed'")
-            pendentes = [row[0] for row in cur.fetchall()]
-
-        achados = 0
-        with conn.cursor() as cur:
-            for ean in pendentes:
-                medicamento = indice.get(cmed.normalizar_ean(ean))
-                if medicamento is None:
-                    cur.execute(
-                        """
-                        UPDATE produtos
-                        SET status_cmed = 'nao_achou', fase_atual = 'aguardando_crawler',
-                            atualizado_em = now()
-                        WHERE ean = %s
-                        """,
-                        (ean,),
-                    )
-                    continue
-
-                tarja = cmed.TARJA_CMED_PARA_SCHEMA.get(medicamento["tarja"])
-                generico = "Sim" if medicamento["tipo_produto"] == "Genérico" else "Não"
-                origem = f"{cmed.ORIGEM_ANVISA_CMED} (GGREM {medicamento['codigo_ggrem']})"
-                cur.execute(
-                    """
-                    UPDATE produtos
-                    SET tipo_cadastro = 'Medicamento',
-                        registro_ms = %s,
-                        fabricante = %s,
-                        generico = %s,
-                        tarja = %s,
-                        origem_enriquecimento = %s,
-                        confirmado_anvisa_cmed = 'Sim',
-                        precisa_validacao_humana = 'Não',
-                        mensagem_validacao_humana = NULL,
-                        precisa_verificar_tarja = false,
-                        status_cmed = 'achou',
-                        dados_cmed = %s,
-                        fase_atual = 'aguardando_batch_formatacao',
-                        atualizado_em = now()
-                    WHERE ean = %s
-                    """,
-                    (
-                        medicamento["registro"],
-                        medicamento["laboratorio"],
-                        generico,
-                        tarja,
-                        origem,
-                        json.dumps(medicamento, ensure_ascii=False),
-                        ean,
-                    ),
-                )
-                achados += 1
-        conn.commit()
-
-    print(f"{achados} produto(s) confirmado(s) pela CMED de {len(pendentes)} verificado(s).")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="comando", required=True)
 
-    sub.add_parser("criar-tabelas", help="Cria as 3 tabelas se nao existirem")
+    sub.add_parser("criar-tabelas", help="Cria produtos/produtos_historico se nao existirem")
 
     p_carregar = sub.add_parser("carregar-eans", help="Carrega EANs de um xlsx pra tabela produtos")
     p_carregar.add_argument("arquivo", help="Caminho do xlsx (colunas EAN, Nome do produto)")
 
     sub.add_parser("status", help="Mostra quantos produtos estao em cada fase")
-
-    sub.add_parser(
-        "verificar-cmed",
-        help="Verifica produtos aguardando_cmed contra a tabela oficial da ANVISA (anvisa_medicamentos)",
-    )
 
     args = parser.parse_args()
 
@@ -334,8 +264,6 @@ def main():
         carregar_eans(args.arquivo)
     elif args.comando == "status":
         contar_por_fase()
-    elif args.comando == "verificar-cmed":
-        verificar_cmed()
 
 
 if __name__ == "__main__":

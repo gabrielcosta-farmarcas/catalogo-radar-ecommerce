@@ -19,7 +19,8 @@ from db import conectar
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS anvisa_medicamentos (
-    codigo_ggrem        TEXT PRIMARY KEY,
+    id                  BIGSERIAL PRIMARY KEY,
+    codigo_ggrem        TEXT UNIQUE NOT NULL,
     substancia          TEXT NOT NULL,
     cnpj                TEXT NOT NULL,
     laboratorio         TEXT NOT NULL,
