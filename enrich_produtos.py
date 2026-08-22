@@ -118,9 +118,8 @@ SYSTEM_PROMPT = """Você é um especialista em cadastro de produtos farmacêutic
 PROCESSO: web_search (máx. 3) em qualquer fonte confiável (fabricante, ANVISA/Bulário, farmácias \
 online); em divergência, priorize fabricante > ANVISA > farmácias. web_fetch (máx. 3) na(s) \
 página(s) mais confiável(is). Busque a URL de imagem do produto no HTML (src/data-src/og:image, \
-.jpg/.png/.webp); se for medicamento de tarja controlada (Tarja Vermelha ou Tarja Preta), NUNCA \
-retorne imagem_url (null), mesmo existindo. Medicamento Sem Tarja (venda livre) ou com tarja não \
-confirmada tem imagem_url tratada igual não medicamento - busque e retorne normalmente.
+.jpg/.png/.webp) SOMENTE se for Não Medicamento. Se for medicamento (qualquer tarja, inclusive \
+Sem Tarja), NUNCA retorne imagem_url (null), mesmo existindo.
 
 REGRA CRÍTICA: nunca invente, deduza, estime ou infira dado algum; nunca use produto ou \
 apresentação semelhante. Campo não confirmado na fonte = null (sempre melhor que dado errado).
@@ -186,8 +185,8 @@ não houver informação real o suficiente - nunca invente conteúdo só pra alo
 objetiva, sem termos comerciais/emojis, com nome+marca+finalidade, escrita com suas próprias \
 palavras - nunca copie frase da bula/página quase literalmente, mesmo trocando 1-2 palavras; pode \
 usar sinônimo, nunca mudar o fato/grau/nuance médica. \
-imagem_url = URL real encontrada na página, null se não achar ou se for medicamento de tarja \
-controlada (Tarja Vermelha/Preta). pagina_produto_url = URL da fonte principal. preco_pesquisado = preço exatamente como exibido na \
+imagem_url = URL real encontrada na página, só para Não Medicamento; null se não achar \
+ou se for medicamento (qualquer tarja). pagina_produto_url = URL da fonte principal. preco_pesquisado = preço exatamente como exibido na \
 página da fonte principal (ex: "R$ 19,90"), null se a página não mostrar preço ou o preço achado \
 não for claramente desta apresentação específica - é só uma referência do que foi visto na busca, \
 NUNCA um dado oficial do produto, então nunca infira nem estime a partir de outra apresentação/ \
@@ -378,8 +377,9 @@ def build_user_message(ean, nome_produto, pistas_nao_confirmadas=None):
                 f"{linhas}\n"
             )
     partes.append(
-        "Retorne o JSON completo, incluindo a URL da imagem do produto se "
-        "conseguir localizar no conteúdo da página."
+        "Retorne o JSON completo. Se for Não Medicamento, inclua a URL da "
+        "imagem do produto se conseguir localizar no conteúdo da página. "
+        "Se for Medicamento, imagem_url deve ser null."
     )
     return "\n".join(partes)
 
@@ -1219,11 +1219,6 @@ def _ferramentas_tarja(max_uses=2):
 
 ALLOWED_TARJA = {"Sem Tarja", "Tarja Vermelha", "Tarja Preta", "Não aplicável"}
 
-# só essas tarjas bloqueiam imagem de medicamento - tarja vazia (não
-# confirmada) ou "Sem Tarja" (venda livre) tem imagem liberada igual
-# não-medicamento (ver apply_safety_checks)
-TARJA_CONTROLADA = {"Tarja Vermelha", "Tarja Preta"}
-
 # prefixo de origem_enriquecimento usado pela camada 0 (cmed.py, ver
 # enrich_com_crawler.py) - mesmo valor de cmed.ORIGEM_ANVISA_CMED, duplicado
 # aqui só como uma string pra não criar dependência deste módulo em cmed.py
@@ -1552,8 +1547,7 @@ def apply_safety_checks(data, ean):
         data["tarja"] = "Não aplicável"
         data["precisa_retencao_receita"] = "Não"
 
-    # tarja fora do vocabulário fechado = alucinação, zera. Feito antes da
-    # decisão sobre imagem (mais abaixo), que depende da tarja já sanitizada.
+    # tarja fora do vocabulário fechado = alucinação, zera.
     tarja = data.get("tarja")
     if tarja is not None and tarja not in ALLOWED_TARJA:
         print(f"  [aviso] tarja inválida para EAN {ean} ({tarja!r}) - zerada.")
@@ -1605,17 +1599,14 @@ def apply_safety_checks(data, ean):
     if not origem_e_cmed:
         data["precisa_retencao_receita"] = "Sim" if tarja == "Tarja Preta" else "Não"
 
-    # imagem: bloqueada só para medicamento de tarja controlada (Vermelha/
-    # Preta) - tarja vazia (não confirmada) ou "Sem Tarja" (venda livre)
-    # libera imagem igual não-medicamento. Calculado só agora, depois da
-    # tarja já sanitizada pelos dois checks acima, pra não deixar passar
-    # imagem de um controlado que só parecia "Sem Tarja" por vocabulário
-    # inválido ou por fonte não confirmada.
-    imagem_bloqueada = is_medicamento and tarja in TARJA_CONTROLADA
+    # medicamento nunca leva imagem no e-commerce (regra de negócio) -
+    # qualquer tarja, inclusive Sem Tarja / não confirmada. Não-medicamento
+    # segue com a URL, depois filtrada por tamanho mínimo.
+    imagem_bloqueada = is_medicamento
     if imagem_bloqueada and data.get("imagem_url"):
         print(
-            f"  [info] imagem removida para EAN {ean} (medicamento com "
-            f"tarja controlada - {tarja}): {data['imagem_url']}"
+            f"  [info] imagem removida para EAN {ean} (medicamento): "
+            f"{data['imagem_url']}"
         )
         data["imagem_url"] = None
 
@@ -1974,17 +1965,16 @@ def call_model(
                     "Sim" if data.get("tarja") == "Tarja Preta" else "Não"
                 )
 
-                # imagem também depende da tarja (ver apply_safety_checks) -
-                # a verificação dedicada pode ter mudado a tarja depois que
-                # aquela função já decidiu se a imagem ficava ou não (ex:
-                # modelo achou "Sem Tarja" na resposta principal e trouxe
-                # imagem, mas a verificação dedicada confirmou "Tarja
-                # Vermelha") - remove agora se a tarja final for controlada.
-                if data.get("tarja") in TARJA_CONTROLADA and data.get("imagem_url"):
+                # medicamento nunca leva imagem - reforço depois da
+                # verificação de tarja, caso algum caminho ainda tenha
+                # preenchido imagem_url.
+                if (
+                    data.get("tipo_cadastro") == "Medicamento"
+                    and data.get("imagem_url")
+                ):
                     print(
-                        f"  [info] imagem removida para EAN {ean} - "
-                        f"verificação dedicada confirmou tarja controlada "
-                        f"({data['tarja']}): {data['imagem_url']}"
+                        f"  [info] imagem removida para EAN {ean} "
+                        f"(medicamento): {data['imagem_url']}"
                     )
                     data["imagem_url"] = None
 

@@ -67,6 +67,59 @@ import iqvia
 import substancias_controladas
 import enrich_produtos as ep
 
+CLIENT = None
+MODELO_PADRAO = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+
+
+def garantir_cliente():
+    """Cria o cliente Anthropic uma vez. Usado pelo CLI e pela API HTTP."""
+    global CLIENT
+    if CLIENT is None:
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key or "COLOQUE_SUA_KEY_AQUI" in api_key:
+            raise RuntimeError("Defina uma API key válida da Anthropic (ANTHROPIC_API_KEY).")
+        CLIENT = ep.Anthropic()
+    return CLIENT
+
+
+def _args_enriquecimento(
+    model=MODELO_PADRAO,
+    verify_images=False,
+    sem_verificar_tarja=False,
+    sleep=1.0,
+):
+    return argparse.Namespace(
+        model=model,
+        verify_images=verify_images,
+        sem_verificar_tarja=sem_verificar_tarja,
+        sleep=sleep,
+    )
+
+
+def enriquecer_ean(
+    ean,
+    nome_produto,
+    model=MODELO_PADRAO,
+    verify_images=False,
+    sem_verificar_tarja=False,
+    sleep=0.0,
+    on_progress=None,
+):
+    """
+    Roda o mesmo fluxo do CLI para UM EAN e devolve
+    (ean, nome_produto, data, usage). Não grava no banco - o chamador decide.
+    """
+    garantir_cliente()
+    nome = ep.nome_para_busca(nome_produto)
+    args = _args_enriquecimento(
+        model=model,
+        verify_images=verify_images,
+        sem_verificar_tarja=sem_verificar_tarja,
+        sleep=sleep,
+    )
+    args.on_progress = on_progress
+    return worker(str(ean).strip(), nome, args)
+
 # mesma ordem de prioridade do scraper.consolidate - sites mais confiáveis/
 # completos primeiro (ultrafarma fica de fora, não busca por EAN). sara vem
 # primeiro de todos: não é farmácia (sem preço/venda), é um portal de
@@ -327,7 +380,7 @@ def mapear_para_schema(resultado, fontes, client, model):
         "categoria": formatados.get("categoria"),
         "subcategoria": formatados.get("subcategoria"),
         "origem_categorizacao": "ia",  # crawler não tem de-para ainda
-        "imagem_url": resultado.get("image1"),
+        "imagem_url": None if tipo_cadastro == "Medicamento" else resultado.get("image1"),
         "pagina_produto_url": resultado.get("url"),
         # mesmo quando o crawler acha o produto, título/categoria/descrição
         # ainda passam por uma chamada ao Claude (sem busca) - o rótulo deixa
@@ -512,10 +565,8 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
         "categoria": categoria_mapeada["categoria"] if categoria_mapeada else formatados.get("categoria"),
         "subcategoria": categoria_mapeada["subcategoria"] if categoria_mapeada else formatados.get("subcategoria"),
         "origem_categorizacao": "mapeamento_cmed" if categoria_mapeada else "ia",
-        # imagem do crawler já chamado acima pra descricao_curta - sem custo
-        # extra de token. apply_safety_checks zera se a tarja for controlada
-        # (Vermelha/Preta); "Sem Tarja"/não confirmada mantém a imagem.
-        "imagem_url": resultado_crawler.get("image1"),
+        # medicamento nunca leva imagem (apply_safety_checks reforça).
+        "imagem_url": None,
         "pagina_produto_url": None,
         "origem_enriquecimento": f"{cmed.ORIGEM_ANVISA_CMED} (GGREM {medicamento['codigo_ggrem']})",
         "confirmado_anvisa_cmed": "Sim",
@@ -623,10 +674,8 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
         "categoria": formatados.get("categoria"),
         "subcategoria": formatados.get("subcategoria"),
         "origem_categorizacao": "ia",  # ABCFarma não tem de-para ainda
-        # imagem do crawler já chamado acima pra descricao_curta - sem custo
-        # extra de token. apply_safety_checks zera se a tarja for controlada
-        # (Vermelha/Preta); "Sem Tarja"/não confirmada mantém a imagem.
-        "imagem_url": resultado_crawler.get("image1"),
+        # medicamento nunca leva imagem (apply_safety_checks reforça).
+        "imagem_url": None,
         "pagina_produto_url": pagina_produto_url,
         "origem_enriquecimento": (
             f"{abcfarma.ORIGEM_ABCFARMA} (produto {medicamento['codigo_produto']})"
@@ -823,11 +872,9 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
         "categoria": categoria_mapeada["categoria"] if categoria_mapeada else formatados.get("categoria"),
         "subcategoria": categoria_mapeada["subcategoria"] if categoria_mapeada else formatados.get("subcategoria"),
         "origem_categorizacao": "mapeamento_iqvia" if categoria_mapeada else "ia",
-        # IQVIA não tem coluna de imagem - usa a mesma consulta ao crawler já
-        # feita acima pra descricao_curta (Sara/drogasil/drogaraia, ou as 9
-        # farmácias no caminho RX). apply_safety_checks cuida do resto: zera
-        # se for medicamento, valida dimensão mínima se não for.
-        "imagem_url": resultado_crawler.get("image1"),
+        # IQVIA não tem coluna de imagem - crawler só preenche foto de
+        # não-medicamento. Medicamento sai sem imagem (regra de negócio).
+        "imagem_url": None if eh_medicamento else resultado_crawler.get("image1"),
         "pagina_produto_url": pagina_produto_url,
         "origem_enriquecimento": f"{iqvia.ORIGEM_IQVIA} (FCC {produto['fcc']})",
         "confirmado_anvisa_cmed": "Não",
@@ -892,16 +939,26 @@ def montar_pistas_nao_confirmadas(resultado, fontes):
     return pistas
 
 
+def _avisar(args, etapa, mensagem):
+    callback = getattr(args, "on_progress", None)
+    if callback:
+        callback(etapa, mensagem)
+
+
 def worker(ean, nome_produto, args):
     usage_total = {"tokens": 0, "cache_creation": 0, "cache_read": 0}
 
+    _avisar(args, "cmed", "Consultando CMED/ANVISA")
     medicamento_cmed = cmed.buscar_medicamento_anvisa(ean)
     if medicamento_cmed is not None:
+        _avisar(args, "formatacao", "Formatando dados da CMED")
         data, usage = mapear_cmed_para_schema(medicamento_cmed, ean, CLIENT, args.model)
         return ean, nome_produto, data, usage
 
+    _avisar(args, "abcfarma", "Consultando ABCFarma")
     medicamento_abcfarma = abcfarma.buscar_medicamento_abcfarma(ean)
     if medicamento_abcfarma is not None:
+        _avisar(args, "formatacao", "Formatando dados da ABCFarma")
         data, usage = mapear_abcfarma_para_schema(
             medicamento_abcfarma,
             ean,
@@ -911,8 +968,10 @@ def worker(ean, nome_produto, args):
         )
         return ean, nome_produto, data, usage
 
+    _avisar(args, "iqvia", "Consultando IQVIA")
     produto_iqvia = iqvia.buscar_produto_iqvia(ean)
     if produto_iqvia is not None:
+        _avisar(args, "formatacao", "Formatando dados da IQVIA")
         data, usage = mapear_iqvia_para_schema(
             produto_iqvia,
             ean,
@@ -922,12 +981,15 @@ def worker(ean, nome_produto, args):
         )
         return ean, nome_produto, data, usage
 
+    _avisar(args, "crawler", "Buscando em farmácias")
     resultado, fontes = buscar_no_crawler(ean)
 
     if eh_confiavel(resultado, fontes):
+        _avisar(args, "formatacao", "Formatando dados do crawler")
         data, usage = mapear_para_schema(resultado, fontes, CLIENT, args.model)
         return ean, nome_produto, data, usage
 
+    _avisar(args, "claude", "Buscando com Claude (pode demorar)")
     time.sleep(args.sleep)
     data, usage_claude = ep.call_model(
         CLIENT,
@@ -970,7 +1032,7 @@ def worker_reconciliar(ean, nome_produto, args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model", default="claude-haiku-4-5-20251001")
+    parser.add_argument("--model", default=MODELO_PADRAO)
     parser.add_argument(
         "--eans",
         default=None,
@@ -994,12 +1056,10 @@ def main():
     )
     args = parser.parse_args()
 
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    if not api_key or "COLOQUE_SUA_KEY_AQUI" in api_key:
-        sys.exit("Erro: defina uma API key válida da Anthropic.")
-
-    global CLIENT
-    CLIENT = ep.Anthropic()
+    try:
+        garantir_cliente()
+    except RuntimeError as exc:
+        sys.exit(f"Erro: {exc}")
 
     eans_filtro = None
     if args.eans:
