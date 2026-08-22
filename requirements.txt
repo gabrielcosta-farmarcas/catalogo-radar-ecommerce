@@ -1,0 +1,12 @@
+fastapi
+uvicorn[standard]
+pydantic
+swagger-ui-bundle
+pandas
+openpyxl
+psycopg2-binary
+anthropic
+httpx
+Pillow
+requests
+pypdf

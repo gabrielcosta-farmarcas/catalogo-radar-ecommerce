@@ -1,0 +1,119 @@
+{
+  "info": {
+    "name": "Catálogo Radar e-commerce",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://127.0.0.1:8000" },
+    { "key": "ean", "value": "7891150097377" },
+    { "key": "job_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      }
+    },
+    {
+      "name": "Crédito Anthropic",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/anthropic/credito"
+      }
+    },
+    {
+      "name": "Estatísticas",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/produtos/estatisticas"
+      }
+    },
+    {
+      "name": "Listar produtos",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/produtos?limit=50&offset=0"
+      }
+    },
+    {
+      "name": "Cadastrar produto na fila",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ean\": \"{{ean}}\",\n  \"nome_produto\": \"Kit Ceramidas Shampoo & Condicionador Seda\"\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/produtos"
+      }
+    },
+    {
+      "name": "Consultar produto",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/produtos/{{ean}}"
+      }
+    },
+    {
+      "name": "Histórico do produto",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/produtos/{{ean}}/historico"
+      }
+    },
+    {
+      "name": "Enriquecer produto já cadastrado",
+      "request": {
+        "method": "POST",
+        "url": "{{baseUrl}}/api/v1/produtos/{{ean}}/enriquecer"
+      }
+    },
+    {
+      "name": "Enriquecer (job com progresso)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ean\": \"{{ean}}\",\n  \"nome_produto\": \"Kit Ceramidas Shampoo & Condicionador Seda\",\n  \"salvar\": true,\n  \"sem_verificar_tarja\": false\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/enriquecer/jobs"
+      }
+    },
+    {
+      "name": "Acompanhar job",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/jobs/{{job_id}}"
+      }
+    },
+    {
+      "name": "Enriquecer (espera o resultado)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"ean\": \"{{ean}}\",\n  \"nome_produto\": \"Kit Ceramidas Shampoo & Condicionador Seda\",\n  \"salvar\": true,\n  \"sem_verificar_tarja\": false\n}"
+        },
+        "url": "{{baseUrl}}/api/v1/enriquecer"
+      }
+    },
+    {
+      "name": "Consultar fontes (sem Claude)",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/fontes/{{ean}}"
+      }
+    },
+    {
+      "name": "Árvore de categorias",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/v1/categorias"
+      }
+    }
+  ]
+}
