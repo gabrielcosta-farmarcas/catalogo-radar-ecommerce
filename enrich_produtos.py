@@ -1370,6 +1370,9 @@ ESQUEMAS_URL_PERMITIDOS = {"http", "https"}
 IMAGEM_REDIRECTS_MAX = 3
 HOSTS_IMAGEM_BLOQUEADOS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 
+# fotos aceitas no enriquecimento — um JPEG por EAN, na raiz do projeto
+DIRETORIO_IMAGENS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "imagens")
+
 
 def _host_imagem_publico(hostname):
     """Recusa loopback/rede privada - image_url vem do modelo e o download
@@ -1393,6 +1396,47 @@ def _host_imagem_publico(hostname):
     return True
 
 
+def _baixar_imagem(image_url, max_bytes=IMAGEM_MAX_BYTES, timeout=10):
+    """
+    Baixa a imagem com as mesmas travas de SSRF da validação de tamanho
+    (http/https, host público, teto de bytes, redirect revalidado).
+    Retorna (bytes, None) ou (None, motivo).
+    """
+    url_atual = image_url
+    try:
+        for _ in range(IMAGEM_REDIRECTS_MAX + 1):
+            parsed = urlparse(url_atual)
+            esquema = parsed.scheme.lower()
+            if esquema not in ESQUEMAS_URL_PERMITIDOS:
+                return None, f"esquema de URL não permitido ({esquema!r})"
+            if not _host_imagem_publico(parsed.hostname):
+                return None, f"host de imagem não permitido ({parsed.hostname!r})"
+
+            with httpx.stream(
+                "GET", url_atual, timeout=timeout, follow_redirects=False
+            ) as response:
+                if response.is_redirect:
+                    location = response.headers.get("location")
+                    if not location:
+                        return None, "redirect sem Location"
+                    url_atual = str(response.url.join(location))
+                    continue
+                response.raise_for_status()
+                content_length = response.headers.get("content-length")
+                if content_length and int(content_length) > max_bytes:
+                    return None, f"imagem maior que o teto de {max_bytes} bytes"
+
+                chunks = bytearray()
+                for chunk in response.iter_bytes():
+                    chunks.extend(chunk)
+                    if len(chunks) > max_bytes:
+                        return None, f"imagem maior que o teto de {max_bytes} bytes"
+            return bytes(chunks), None
+        return None, f"mais de {IMAGEM_REDIRECTS_MAX} redirects"
+    except (httpx.HTTPError, OSError, ValueError) as exc:
+        return None, f"não foi possível baixar a imagem ({exc})"
+
+
 def check_imagem_tamanho_minimo(
     image_url,
     largura_minima=IMAGEM_LARGURA_MINIMA,
@@ -1406,49 +1450,61 @@ def check_imagem_tamanho_minimo(
     imagem. image_url vem da resposta do modelo, não de uma fonte confiável,
     então valida o esquema e o host (nunca file://, nunca loopback/rede
     privada) e baixa em streaming com teto de bytes, sem seguir redirect
-    cego. Retorna (ok: bool, motivo: str) para logging.
+    cego. Retorna (ok: bool, motivo: str, conteudo: bytes|None).
     """
-    url_atual = image_url
+    conteudo, motivo = _baixar_imagem(image_url, max_bytes=max_bytes, timeout=timeout)
+    if conteudo is None:
+        return False, motivo, None
     try:
-        for _ in range(IMAGEM_REDIRECTS_MAX + 1):
-            parsed = urlparse(url_atual)
-            esquema = parsed.scheme.lower()
-            if esquema not in ESQUEMAS_URL_PERMITIDOS:
-                return False, f"esquema de URL não permitido ({esquema!r})"
-            if not _host_imagem_publico(parsed.hostname):
-                return False, f"host de imagem não permitido ({parsed.hostname!r})"
-
-            with httpx.stream(
-                "GET", url_atual, timeout=timeout, follow_redirects=False
-            ) as response:
-                if response.is_redirect:
-                    location = response.headers.get("location")
-                    if not location:
-                        return False, "redirect sem Location"
-                    url_atual = str(response.url.join(location))
-                    continue
-                response.raise_for_status()
-                content_length = response.headers.get("content-length")
-                if content_length and int(content_length) > max_bytes:
-                    return False, f"imagem maior que o teto de {max_bytes} bytes"
-
-                chunks = bytearray()
-                for chunk in response.iter_bytes():
-                    chunks.extend(chunk)
-                    if len(chunks) > max_bytes:
-                        return False, f"imagem maior que o teto de {max_bytes} bytes"
-
-            with Image.open(io.BytesIO(chunks)) as img:
-                largura, altura = img.size
-            if largura < largura_minima or altura < altura_minima:
-                return False, (
+        with Image.open(io.BytesIO(conteudo)) as img:
+            largura, altura = img.size
+        if largura < largura_minima or altura < altura_minima:
+            return (
+                False,
+                (
                     f"{largura}x{altura}px (mínimo exigido: "
                     f"{largura_minima}x{altura_minima}px)"
-                )
-            return True, f"{largura}x{altura}px"
-        return False, f"mais de {IMAGEM_REDIRECTS_MAX} redirects"
-    except (httpx.HTTPError, UnidentifiedImageError, OSError, ValueError) as exc:
-        return False, f"não foi possível validar a imagem ({exc})"
+                ),
+                None,
+            )
+        return True, f"{largura}x{altura}px", conteudo
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        return False, f"não foi possível validar a imagem ({exc})", None
+
+
+def salvar_imagem_local(ean, image_url, conteudo=None):
+    """
+    Grava a foto do produto em imagens/{ean}.jpg. Converte para JPEG mesmo
+    se a origem for png/webp. Falha de download não derruba o cadastro.
+    Retorna o caminho gravado ou None.
+    """
+    ean_arquivo = re.sub(r"\D", "", str(ean or ""))
+    if not ean_arquivo:
+        return None
+    if conteudo is None:
+        if not image_url:
+            return None
+        conteudo, motivo = _baixar_imagem(image_url)
+        if conteudo is None:
+            print(f"  [aviso] não gravou imagem local para EAN {ean_arquivo} ({motivo})")
+            return None
+    try:
+        os.makedirs(DIRETORIO_IMAGENS, exist_ok=True)
+        destino = os.path.join(DIRETORIO_IMAGENS, f"{ean_arquivo}.jpg")
+        with Image.open(io.BytesIO(conteudo)) as img:
+            if img.mode in ("RGBA", "LA", "P"):
+                fundo = Image.new("RGB", img.size, (255, 255, 255))
+                rgba = img.convert("RGBA")
+                fundo.paste(rgba, mask=rgba.split()[-1])
+                img = fundo
+            elif img.mode != "RGB":
+                img = img.convert("RGB")
+            img.save(destino, "JPEG", quality=90)
+        print(f"  [info] imagem salva em {destino}")
+        return destino
+    except (UnidentifiedImageError, OSError, ValueError) as exc:
+        print(f"  [aviso] não gravou imagem local para EAN {ean_arquivo} ({exc})")
+        return None
 
 
 def validar_categorizacao(data):
@@ -1613,13 +1669,16 @@ def apply_safety_checks(data, ean):
     # imagem pequena demais (ícone/logo/thumbnail) não serve como foto de
     # produto - descarta sem gastar token, é só download + leitura local
     if not imagem_bloqueada and data.get("imagem_url"):
-        ok, motivo = check_imagem_tamanho_minimo(data["imagem_url"])
+        ok, motivo, conteudo = check_imagem_tamanho_minimo(data["imagem_url"])
         if not ok:
             print(
                 f"  [aviso] imagem descartada para EAN {ean} ({motivo}): "
                 f"{data['imagem_url']}"
             )
             data["imagem_url"] = None
+            data.pop("_imagem_bytes", None)
+        elif conteudo:
+            data["_imagem_bytes"] = conteudo
 
     # registro_ms e generico só fazem sentido para medicamento
     if not is_medicamento:
@@ -1977,6 +2036,7 @@ def call_model(
                         f"(medicamento): {data['imagem_url']}"
                     )
                     data["imagem_url"] = None
+                    data.pop("_imagem_bytes", None)
 
             if verify_images and data.get("imagem_url"):
                 ok, verify_tokens = verify_image(
@@ -1994,6 +2054,7 @@ def call_model(
                         f"(não corresponde ao produto): {data['imagem_url']}"
                     )
                     data["imagem_url"] = None
+                    data.pop("_imagem_bytes", None)
 
             return data, usage
 
@@ -2105,6 +2166,12 @@ def salvar_resultado(conn, ean, data, usage=None):
         produto_id = cur.fetchone()[0]
         registrar_versao_historico(cur, produto_id, ean, "concluido", data, usage)
     conn.commit()
+    if data.get("imagem_url"):
+        salvar_imagem_local(
+            ean,
+            data["imagem_url"],
+            conteudo=data.pop("_imagem_bytes", None),
+        )
 
 
 def registrar_versao_historico(cur, produto_id, ean, fase_resultado, data, usage):

@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>radar catálogo — protótipo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy: #0b1b4a;
+      --blue: #2f6bff;
+      --blue-2: #4d84ff;
+      --blue-soft: #eef3ff;
+      --text: #1a2340;
+      --muted: #6b7390;
+      --line: #e6eaf4;
+      --bg: #f5f7fb;
+      --card: #fff;
+      --ok: #0f9d6e;
+      --ok-bg: #e8f8f1;
+      --warn: #c47a00;
+      --warn-bg: #fff6e5;
+      --danger: #d12b4a;
+      --danger-bg: #fde8ed;
+      --shadow: 0 8px 28px rgba(15, 35, 90, 0.06);
+      --radius: 14px;
+      --focus: 0 0 0 3px rgba(47, 107, 255, .35);
+      --fast: 140ms ease;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; width: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.45;
+      font-family: Inter, system-ui, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    }
+    #app { width: 100%; min-height: 100%; }
+    button, input, select { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    .hidden { display: none !important; }
+
+    a.skip-link {
+      position: absolute; left: -999px; top: 0;
+      background: var(--navy); color: #fff; padding: 10px 16px;
+      border-radius: 0 0 10px 0; z-index: 200;
+    }
+    a.skip-link:focus { left: 0; }
+
+    :focus-visible { outline: none; box-shadow: var(--focus); border-radius: 8px; }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+
+    /* toast */
+    .toast-region {
+      position: fixed; right: 20px; bottom: 20px; z-index: 300;
+      display: flex; flex-direction: column; gap: 8px;
+      max-width: min(320px, calc(100% - 40px));
+    }
+    .toast {
+      background: var(--navy); color: #fff; padding: 12px 16px;
+      border-radius: 10px; box-shadow: var(--shadow);
+      font-size: 13px; opacity: 0; transform: translateY(8px);
+      transition: opacity var(--fast), transform var(--fast);
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    .logo { display: flex; align-items: center; gap: 8px; justify-content: flex-start; margin-bottom: 28px; }
+    .logo svg { height: 20px; width: auto; flex-shrink: 0; }
+    .tag {
+      background: #0091ff;
+      color: #fafbfc;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 2px;
+      line-height: 1.4;
+    }
+    .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    .field label { color: var(--muted); font-size: 13px; }
+    .field input {
+      width: 100%;
+      border: 0;
+      background: var(--blue-soft);
+      border-radius: 10px;
+      padding: 14px 16px;
+      outline: none;
+      transition: box-shadow var(--fast);
+    }
+    .field input:focus { box-shadow: var(--focus); }
+    .btn {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 10px 14px;
+      display: inline-flex; align-items: center; gap: 8px;
+      transition: background var(--fast), border-color var(--fast), transform var(--fast);
+    }
+    .btn:hover { border-color: #c9d8ff; background: var(--blue-soft); }
+    .btn:active { transform: translateY(1px); }
+    .btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+    .btn.primary {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+      font-weight: 700;
+    }
+    .btn.primary:hover { background: var(--blue-2); border-color: var(--blue-2); }
+    .btn.full { width: 100%; padding: 14px; justify-content: center; }
+    .btn.icon { padding: 10px; }
+    .hint { margin-top: 16px; color: var(--muted); font-size: 12px; text-align: center; }
+    .spinner {
+      width: 14px; height: 14px; border-radius: 50%;
+      border: 2px solid rgba(255,255,255,.4); border-top-color: #fff;
+      animation: spin .7s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* app shell */
+    .shell {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      min-height: 100%;
+      width: 100%;
+    }
+    .mobile-bar { display: none; }
+    .overlay { display: none; }
+    .side {
+      background: #fff;
+      border-right: 1px solid var(--line);
+      padding: 20px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+    .side .logo { margin: 0 8px 4px; justify-content: flex-start; }
+    .side-close { display: none; margin-left: auto; }
+    @media (max-width: 1100px) { .side-close { display: grid; } }
+    .nav { display: flex; flex-direction: column; gap: 4px; }
+    .nav button {
+      background: none; border: 0; color: var(--muted);
+      padding: 10px 12px; font-weight: 600;
+      border-radius: 10px; text-align: left;
+      display: flex; align-items: center; gap: 10px;
+      transition: background var(--fast), color var(--fast);
+    }
+    .nav button svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .nav button .label { flex: 1; }
+    .nav button:hover { background: var(--blue-soft); color: var(--blue); }
+    .nav button[aria-current="page"] { background: var(--blue-soft); color: var(--blue); }
+    .nav .count {
+      display: inline-grid; place-items: center;
+      min-width: 18px; height: 18px; padding: 0 5px;
+      border-radius: 99px; background: var(--danger); color: #fff;
+      font-size: 11px; font-weight: 700;
+    }
+    .utils {
+      margin-top: auto;
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 8px 4px; color: var(--muted);
+      border-top: 1px solid var(--line);
+    }
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--blue-soft); color: var(--blue);
+      display: grid; place-items: center; font-weight: 700;
+      flex-shrink: 0;
+    }
+    .who { display: flex; flex-direction: column; line-height: 1.2; flex: 1; min-width: 0; }
+    .who b { color: var(--navy); font-size: 13px; }
+    .who span { font-size: 11px; }
+    .logout {
+      border: 0; background: none; color: var(--muted); padding: 6px; border-radius: 8px;
+      display: grid; place-items: center; flex-shrink: 0;
+    }
+    .logout:hover { color: var(--danger); background: var(--danger-bg); }
+    .logout svg { width: 16px; height: 16px; }
+
+    .page { padding: 20px 28px 32px 20px; width: 100%; min-width: 0; max-width: none; }
+    .page-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 18px; flex-wrap: wrap; }
+    h1 { margin: 0; font-size: 28px; color: var(--navy); }
+    .sub { color: var(--muted); margin: 6px 0 0; }
+    .breadcrumb { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; margin: 0 0 6px; }
+    .breadcrumb button { background: none; border: 0; color: var(--blue); padding: 0; font-weight: 600; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+    .kpi {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow);
+      text-align: left; width: 100%;
+      transition: border-color var(--fast), box-shadow var(--fast);
+    }
+    .kpi.click { cursor: pointer; }
+    .kpi.click:hover, .kpi.on { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,107,255,.12); }
+    .kpi .k { color: var(--muted); font-size: 13px; }
+    .kpi .v { font-size: 28px; font-weight: 700; color: var(--navy); margin-top: 6px; }
+    .kpi .s { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    .filters {
+      display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .search-wrap { position: relative; flex: 1; min-width: 240px; }
+    .search-wrap svg {
+      position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+      width: 16px; height: 16px; color: var(--muted); pointer-events: none;
+    }
+    .search {
+      width: 100%;
+      border: 1px solid var(--line); background: #fff;
+      border-radius: 10px; padding: 11px 14px 11px 38px;
+      transition: box-shadow var(--fast), border-color var(--fast);
+    }
+    .search:focus { border-color: var(--blue); box-shadow: var(--focus); }
+    .chip {
+      border: 1px solid var(--line); background: #fff;
+      border-radius: 999px; padding: 8px 12px; color: var(--muted);
+      transition: background var(--fast), color var(--fast), border-color var(--fast);
+    }
+    .chip:hover { border-color: #c9d8ff; }
+    .chip[aria-pressed="true"] { background: var(--blue-soft); color: var(--blue); border-color: #c9d8ff; font-weight: 600; }
+
+    .list {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      overflow: auto;
+      width: 100%;
+    }
+    .cols {
+      display: grid;
+      grid-template-columns: 56px minmax(280px, 2.4fr) minmax(120px, 1fr) minmax(160px, 1.3fr) minmax(120px, 1fr) 130px 28px;
+      gap: 16px;
+      align-items: center;
+      width: 100%;
+    }
+    .item .lbl { display: none; }
+    .head {
+      padding: 10px 18px;
+      background: #f8f9fd;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+    .item {
+      padding: 12px 18px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--line);
+      transition: background var(--fast);
+    }
+    .item:last-child { border-bottom: 0; }
+    .item:hover, .item:focus-visible { background: #f8faff; }
+    .thumb {
+      width: 48px; height: 48px; border-radius: 10px;
+      background: var(--blue-soft); display: grid; place-items: center;
+      color: var(--blue); font-size: 10px; font-weight: 700; text-align: center;
+      overflow: hidden; flex-shrink: 0;
+    }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .lbl { font-size: 11px; color: var(--muted); display: block; margin-bottom: 2px; }
+    .val { font-weight: 700; color: var(--navy); }
+    .ean {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px; color: var(--text); letter-spacing: .02em;
+      display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+    }
+    .copy {
+      border: 0; background: none; color: var(--blue); padding: 2px 6px 2px 6px; font-size: 12px;
+      border-radius: 6px;
+    }
+    .copy:hover { background: rgba(47,107,255,.1); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .pill svg { width: 12px; height: 12px; flex-shrink: 0; }
+    .ok { background: var(--ok-bg); color: var(--ok); }
+    .warn { background: var(--warn-bg); color: var(--warn); }
+    .danger { background: var(--danger-bg); color: var(--danger); }
+    .neutral { background: var(--blue-soft); color: var(--blue); }
+    .chev { color: var(--muted); font-size: 22px; justify-self: end; }
+
+    .empty-state { padding: 48px 24px; text-align: center; color: var(--muted); }
+    .empty-state svg { width: 40px; height: 40px; color: var(--line); margin-bottom: 10px; }
+    .empty-state p { margin: 0 0 12px; }
+
+    .alert {
+      background: #fff8e8; border: 1px solid #f2d59a; color: #8a5a00;
+      border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;
+      display: flex; gap: 10px; align-items: flex-start;
+    }
+    .alert svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
+
+    .detail { display: grid; grid-template-columns: 280px 1fr; gap: 20px; }
+    .photo-card, .panel {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow);
+    }
+    .photo {
+      height: 240px; border-radius: 12px; background: var(--blue-soft);
+      display: grid; place-items: center; color: var(--blue); font-weight: 700;
+      flex-direction: column; gap: 8px;
+    }
+    .photo svg { width: 40px; height: 40px; }
+    .photo-name { font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 4px; }
+    .group { margin-top: 18px; }
+    .group:first-of-type { margin-top: 0; }
+    .group h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .cell { background: var(--bg); border-radius: 10px; padding: 10px 12px; }
+    .wide { grid-column: span 2; }
+
+    .job {
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) 1fr;
+      gap: 24px;
+      align-items: start;
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 22px; box-shadow: var(--shadow);
+    }
+    .job-form, .job-track { min-width: 0; }
+    .job .field { margin-bottom: 14px; }
+    .job .field label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+    .job .field input {
+      width: 100%; border: 0; background: var(--blue-soft);
+      border-radius: 10px; padding: 14px 16px; outline: none;
+    }
+    .job .field input:focus { box-shadow: var(--focus); }
+    .job .field input:disabled { opacity: .6; }
+    .progress { height: 8px; background: var(--blue-soft); border-radius: 99px; overflow: hidden; margin: 16px 0; }
+    .progress > div { width: 0%; height: 100%; background: var(--blue); transition: width 400ms ease; }
+    .steps { list-style: none; padding: 0; margin: 0; }
+    .steps li { display: flex; gap: 10px; padding: 8px 0; color: var(--muted); transition: color var(--fast); }
+    .steps li::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--line); margin-top: 5px; flex-shrink: 0; transition: background var(--fast); }
+    .steps li.done { color: var(--ok); }
+    .steps li.done::before { background: var(--ok); }
+    .steps li.now { color: var(--blue); font-weight: 700; }
+    .steps li.now::before { background: var(--blue); box-shadow: 0 0 0 4px rgba(47,107,255,.18); }
+
+    .cat-head, .cat-row {
+      grid-template-columns: minmax(160px, 1fr) minmax(180px, 1.2fr) minmax(180px, 1.2fr) minmax(220px, 1.4fr);
+    }
+    .cat-row { cursor: default; }
+    .cat-row:hover { background: #f8faff; }
+
+    @media (min-width: 1400px) {
+      .detail { grid-template-columns: 320px 1fr; }
+    }
+
+    @media (max-width: 1100px) {
+      .shell { grid-template-columns: 1fr; }
+      .mobile-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 12px 16px; background: #fff; border-bottom: 1px solid var(--line);
+        position: sticky; top: 0; z-index: 60;
+      }
+      .mobile-bar .logo { margin: 0; }
+      .side {
+        position: fixed; top: 0; left: 0; height: 100vh; width: min(280px, 82vw);
+        transform: translateX(-100%); transition: transform 220ms ease;
+        z-index: 100; box-shadow: var(--shadow);
+      }
+      .side.open { transform: translateX(0); }
+      .overlay {
+        display: block; position: fixed; inset: 0; background: rgba(11,27,74,.35);
+        z-index: 90; opacity: 0; pointer-events: none; transition: opacity 220ms ease;
+      }
+      .overlay.show { opacity: 1; pointer-events: auto; }
+      .kpis, .detail, .grid2, .job { grid-template-columns: 1fr; }
+      .item, .head { grid-template-columns: 56px 1fr 36px; }
+      .item > :nth-child(n+3):not(.chev), .head > :nth-child(n+3):not(:last-child) { display: none; }
+      .cat-head, .cat-row { grid-template-columns: 1fr 1fr; }
+      .cat-row > :nth-child(n+3), .cat-head > :nth-child(n+3) { display: none; }
+      .wide { grid-column: auto; }
+    }
+
+    @media (max-width: 640px) {
+      .page { padding: 16px 14px 28px; }
+      .kpis { grid-template-columns: 1fr 1fr; }
+      .item, .head { grid-template-columns: 44px 1fr 28px; gap: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Ir para o conteúdo</a>
+
+  <svg aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
+    <symbol id="logoMark" viewBox="0 0 121 22">
+      <path d="M44.5503 21.0375C44.3361 21.0375 44.1609 20.9709 44.0245 20.8377C43.8882 20.7045 43.8201 20.5333 43.8201 20.324V6.91076C43.8201 6.70147 43.8882 6.53024 44.0245 6.39706C44.1609 6.26388 44.3361 6.19729 44.5503 6.19729H47.9095C48.1237 6.19729 48.2989 6.27339 48.4352 6.4256C48.591 6.55878 48.6689 6.7205 48.6689 6.91076V8.05231C49.74 6.81563 51.181 6.19729 52.992 6.19729H54.2772C54.4914 6.19729 54.6667 6.26388 54.803 6.39706C54.9393 6.53024 55.0075 6.70147 55.0075 6.91076V9.85026C55.0075 10.0405 54.9393 10.2118 54.803 10.364C54.6667 10.4971 54.4914 10.5637 54.2772 10.5637H51.4439C50.6455 10.5637 50.0223 10.7825 49.5744 11.2201C49.146 11.6387 48.9318 12.238 48.9318 13.0181V20.324C48.9318 20.5333 48.8539 20.7045 48.6981 20.8377C48.5618 20.9709 48.3866 21.0375 48.1724 21.0375H44.5503Z" fill="#061938"/>
+      <path d="M61.3844 21.3229C60.3523 21.3229 59.4079 21.1326 58.551 20.7521C57.7137 20.3526 57.0516 19.8198 56.5647 19.1539C56.0974 18.469 55.8637 17.7175 55.8637 16.8994C55.8637 15.5866 56.409 14.5306 57.4995 13.7315C58.6094 12.9325 60.1284 12.3807 62.0562 12.0763L65.7075 11.5341V11.1345C65.7075 10.4115 65.5517 9.8788 65.2401 9.53633C64.9285 9.19386 64.4028 9.02263 63.6628 9.02263C63.2149 9.02263 62.8449 9.09874 62.5528 9.25094C62.2607 9.40315 61.9589 9.61244 61.6473 9.8788C61.3747 10.1071 61.1702 10.2593 61.0339 10.3354C60.9755 10.4876 60.8684 10.5637 60.7126 10.5637H57.5287C57.3339 10.5637 57.1684 10.5067 57.0321 10.3925C56.9153 10.2593 56.8666 10.1071 56.8861 9.93588C56.9055 9.42218 57.1587 8.8514 57.6455 8.22354C58.1518 7.59569 58.9113 7.05345 59.9239 6.59683C60.956 6.14021 62.2217 5.9119 63.7212 5.9119C66.1164 5.9119 67.8885 6.43511 69.0374 7.48153C70.1863 8.50893 70.7608 9.89782 70.7608 11.6482V20.324C70.7608 20.5143 70.6926 20.6855 70.5563 20.8377C70.42 20.9709 70.2448 21.0375 70.0306 21.0375H66.6422C66.4475 21.0375 66.2722 20.9709 66.1164 20.8377C65.9801 20.6855 65.9119 20.5143 65.9119 20.324V19.3252C65.4835 19.915 64.8799 20.4001 64.1009 20.7806C63.3415 21.1421 62.436 21.3229 61.3844 21.3229ZM62.7573 18.0695C63.653 18.0695 64.3736 17.7841 64.9188 17.2133C65.4835 16.6425 65.7659 15.8054 65.7659 14.7019V14.3023L63.283 14.7304C61.5304 15.0348 60.6541 15.6341 60.6541 16.5284C60.6541 17.004 60.8586 17.3845 61.2676 17.6699C61.6765 17.9363 62.1731 18.0695 62.7573 18.0695Z" fill="#061938"/>
+      <path d="M79.7237 21.3229C77.8153 21.3229 76.3256 20.7426 75.2546 19.582C74.203 18.4024 73.6286 16.7472 73.5312 14.6162L73.502 13.6174L73.5312 12.59C73.6091 10.5352 74.1835 8.90848 75.2546 7.70985C76.3451 6.51121 77.8348 5.9119 79.7237 5.9119C81.4958 5.9119 82.9271 6.47316 84.0176 7.59569V1.48837C84.0176 1.27909 84.0857 1.10786 84.222 0.974675C84.3584 0.841493 84.5336 0.774902 84.7478 0.774902H88.3114C88.5256 0.774902 88.7009 0.841493 88.8372 0.974675C88.9735 1.10786 89.0417 1.27909 89.0417 1.48837V20.324C89.0417 20.5143 88.9735 20.6855 88.8372 20.8377C88.7009 20.9709 88.5256 21.0375 88.3114 21.0375H85.0107C84.816 21.0375 84.6407 20.9709 84.4849 20.8377C84.3486 20.6855 84.2805 20.5143 84.2805 20.324V19.4108C83.2094 20.6855 81.6905 21.3229 79.7237 21.3229ZM81.3303 17.4987C82.2065 17.4987 82.8589 17.2323 83.2873 16.6996C83.7157 16.1478 83.9591 15.4439 84.0176 14.5877C84.037 14.3404 84.0468 13.9789 84.0468 13.5032C84.0468 13.0466 84.037 12.6946 84.0176 12.4473C83.9786 11.6672 83.7352 11.0204 83.2873 10.5067C82.8394 9.99295 82.1871 9.7361 81.3303 9.7361C80.415 9.7361 79.7529 10.0025 79.344 10.5352C78.9545 11.0679 78.7306 11.8004 78.6721 12.7327C78.6527 12.9229 78.6429 13.2178 78.6429 13.6174C78.6429 14.0169 78.6527 14.3118 78.6721 14.5021C78.7306 15.4344 78.9545 16.1669 79.344 16.6996C79.7529 17.2323 80.415 17.4987 81.3303 17.4987Z" fill="#061938"/>
+      <path d="M97.0411 21.3229C96.009 21.3229 95.0646 21.1326 94.2077 20.7521C93.3704 20.3526 92.7083 19.8198 92.2215 19.1539C91.7541 18.469 91.5204 17.7175 91.5204 16.8994C91.5204 15.5866 92.0657 14.5306 93.1562 13.7315C94.2662 12.9325 95.7851 12.3807 97.7129 12.0763L101.364 11.5341V11.1345C101.364 10.4115 101.208 9.8788 100.897 9.53633C100.585 9.19386 100.059 9.02263 99.3195 9.02263C98.8716 9.02263 98.5016 9.09874 98.2095 9.25094C97.9174 9.40315 97.6156 9.61244 97.304 9.8788C97.0314 10.1071 96.8269 10.2593 96.6906 10.3354C96.6322 10.4876 96.5251 10.5637 96.3693 10.5637H93.1854C92.9907 10.5637 92.8251 10.5067 92.6888 10.3925C92.572 10.2593 92.5233 10.1071 92.5428 9.93588C92.5623 9.42218 92.8154 8.8514 93.3022 8.22354C93.8085 7.59569 94.568 7.05345 95.5806 6.59683C96.6127 6.14021 97.8785 5.9119 99.3779 5.9119C101.773 5.9119 103.545 6.43511 104.694 7.48153C105.843 8.50893 106.418 9.89782 106.418 11.6482V20.324C106.418 20.5143 106.349 20.6855 106.213 20.8377C106.077 20.9709 105.901 21.0375 105.687 21.0375H102.299C102.104 21.0375 101.929 20.9709 101.773 20.8377C101.637 20.6855 101.569 20.5143 101.569 20.324V19.3252C101.14 19.915 100.537 20.4001 99.7576 20.7806C98.9982 21.1421 98.0927 21.3229 97.0411 21.3229ZM98.414 18.0695C99.3098 18.0695 100.03 17.7841 100.576 17.2133C101.14 16.6425 101.423 15.8054 101.423 14.7019V14.3023L98.9398 14.7304C97.1872 15.0348 96.3109 15.6341 96.3109 16.5284C96.3109 17.004 96.5153 17.3845 96.9243 17.6699C97.3332 17.9363 97.8298 18.0695 98.414 18.0695Z" fill="#061938"/>
+      <path d="M110.444 21.0375C110.23 21.0375 110.054 20.9709 109.918 20.8377C109.782 20.7045 109.714 20.5333 109.714 20.324V6.91076C109.714 6.70147 109.782 6.53024 109.918 6.39706C110.054 6.26388 110.23 6.19729 110.444 6.19729H113.803C114.017 6.19729 114.193 6.27339 114.329 6.4256C114.485 6.55878 114.563 6.7205 114.563 6.91076V8.05231C115.634 6.81563 117.075 6.19729 118.886 6.19729H120.171C120.385 6.19729 120.56 6.26388 120.697 6.39706C120.833 6.53024 120.901 6.70147 120.901 6.91076V9.85026C120.901 10.0405 120.833 10.2118 120.697 10.364C120.56 10.4971 120.385 10.5637 120.171 10.5637H117.337C116.539 10.5637 115.916 10.7825 115.468 11.2201C115.04 11.6387 114.825 12.238 114.825 13.0181V20.324C114.825 20.5333 114.748 20.7045 114.592 20.8377C114.455 20.9709 114.28 21.0375 114.066 21.0375H110.444Z" fill="#061938"/>
+      <path d="M36.6056 20.5587C36.5228 13.1445 32.9327 4.65393 23.6004 0.0361131C23.5595 0.0145148 23.5132 0.0022043 23.4657 0.000269636C23.4182 -0.00166503 23.3708 0.00683454 23.3279 0.0250192C23.2849 0.0432038 23.2477 0.0705135 23.2194 0.104535C23.1912 0.138556 23.1728 0.178243 23.1659 0.220089L22.2864 5.44503C22.2809 5.49022 22.2884 5.53591 22.3084 5.57776C22.3283 5.61962 22.3599 5.65626 22.4002 5.6842C25.0065 7.41577 27.1281 9.65891 28.5996 12.2389C30.0712 14.8189 30.853 17.6661 30.8841 20.5587C30.8841 20.6246 30.9135 20.6878 30.9659 20.7344C31.0183 20.7809 31.0894 20.8071 31.1635 20.8071H36.3366C36.408 20.8026 36.475 20.7747 36.5247 20.7288C36.5744 20.683 36.6032 20.6224 36.6056 20.5587V20.5587Z" fill="#00519D"/>
+      <path d="M30.7684 20.5585C30.6809 15.8957 28.6598 11.4259 25.0929 8.00671C21.5261 4.58754 16.6647 2.45991 11.4417 2.03207C11.3655 2.02937 11.291 2.0526 11.2333 2.09703C11.1756 2.14146 11.1392 2.20376 11.1313 2.27124L10.7485 6.87067C10.7455 6.93602 10.7705 6.99996 10.8185 7.0495C10.8666 7.09904 10.934 7.13048 11.0072 7.13743C14.7895 7.45861 18.3079 9.00229 20.8955 11.4759C23.4832 13.9496 24.9603 17.1812 25.047 20.5585C25.0497 20.6228 25.0803 20.6836 25.1324 20.7283C25.1845 20.7729 25.254 20.7978 25.3263 20.7977H30.4994C30.57 20.7954 30.6369 20.7695 30.6868 20.7251C30.7367 20.6808 30.7659 20.6213 30.7684 20.5585V20.5585Z" fill="#006AB5"/>
+      <path d="M5.47316 20.807C5.54549 20.807 5.61502 20.7821 5.66712 20.7375C5.71922 20.6929 5.74981 20.632 5.75249 20.5678C5.8034 19.6993 6.2273 18.8813 6.93671 18.2826C7.64613 17.6838 8.58693 17.35 9.56507 17.35C10.5432 17.35 11.484 17.6838 12.1935 18.2826C12.9029 18.8813 13.3267 19.6993 13.3776 20.5678C13.3803 20.632 13.411 20.6929 13.4631 20.7375C13.5152 20.7821 13.5847 20.807 13.657 20.807H18.8301C18.9097 20.807 18.986 20.7788 19.0423 20.7288C19.0985 20.6788 19.1301 20.6109 19.1301 20.5402C19.1274 18.2847 18.117 16.1226 16.3213 14.5294C14.5255 12.9363 12.0915 12.0426 9.55471 12.045C7.0179 12.0475 4.58608 12.9458 2.79422 14.5424C1.00236 16.139 -0.00273838 18.3031 5.60369e-06 20.5586C-4.0673e-05 20.6278 0.0301323 20.6943 0.0841822 20.744C0.138232 20.7938 0.211929 20.823 0.289698 20.8253L5.47316 20.807Z" fill="#00B7BA"/>
+      <path d="M19.4911 20.8071H24.6642C24.742 20.8071 24.8168 20.7803 24.8728 20.7322C24.9288 20.6842 24.9616 20.6187 24.9642 20.5495C24.9116 18.2041 24.1818 15.91 22.845 13.8875C21.5081 11.865 19.6091 10.1819 17.3301 8.99974C15.051 7.81758 12.4685 7.17605 9.83039 7.13669C7.19224 7.09734 4.587 7.66149 2.26466 8.77501C2.19868 8.81133 2.1504 8.86831 2.12934 8.93472C2.10827 9.00112 2.11593 9.07214 2.15084 9.13376L4.69603 13.1261C4.7328 13.1811 4.79207 13.2214 4.86148 13.2386C4.93088 13.2557 5.00503 13.2484 5.06848 13.2181C6.52075 12.5377 8.14402 12.1976 9.78514 12.2296C11.4263 12.2617 13.0312 12.6649 14.4485 13.4013C15.8657 14.1376 17.0487 15.1828 17.8857 16.4383C18.7227 17.6938 19.1862 19.1182 19.2324 20.5771C19.2372 20.6367 19.266 20.6928 19.3136 20.735C19.3611 20.7772 19.4241 20.8028 19.4911 20.8071V20.8071Z" fill="#0096AC"/>
+    </symbol>
+  </svg>
+
+  <div id="app">
+    <div class="shell">
+    <div class="mobile-bar">
+      <button class="btn icon" type="button" id="menuOpen" aria-label="Abrir menu" aria-expanded="false" aria-controls="sidebar">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="logo">
+        <svg viewBox="0 0 121 22" aria-hidden="true"><use href="#logoMark"></use></svg>
+      </div>
+      <span style="width:40px" aria-hidden="true"></span>
+    </div>
+    <div class="overlay" id="overlay"></div>
+    <aside class="side" id="sidebar">
+      <div class="logo">
+        <svg viewBox="0 0 121 22" aria-hidden="true"><use href="#logoMark"></use></svg>
+        <span class="tag">catálogo</span>
+        <button class="btn icon side-close" type="button" id="menuClose" aria-label="Fechar menu">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <nav class="nav" aria-label="Navegação principal">
+        <button aria-current="page" data-go="fila">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h11"/></svg>
+          <span class="label">Fila</span>
+        </button>
+        <button data-go="validacao">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z"/><path d="M9.5 12l2 2 3.5-3.5"/></svg>
+          <span class="label">Validação</span>
+          <span class="count">12</span>
+        </button>
+        <button data-go="enriquecer">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>
+          <span class="label">Enriquecer</span>
+        </button>
+        <button data-go="categorias">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h6l1.5 2H20v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/></svg>
+          <span class="label">Categorias</span>
+        </button>
+        <button data-go="fontes">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3"/><path d="M5 5v14c0 1.7 3.1 3 7 3s7-1.3 7-3V5"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>
+          <span class="label">Fontes</span>
+        </button>
+      </nav>
+      <div class="utils">
+        <div class="avatar" aria-hidden="true">GC</div>
+        <div class="who"><b>Gabriel Costa</b><span>Farmarcas</span></div>
+      </div>
+    </aside>
+
+    <main class="page" id="main-content">
+      <section id="fila" class="screen">
+        <div class="page-head">
+          <div>
+            <h1>Fila de produtos</h1>
+            <p class="sub">Atualizado agora · 12.739 SKUs</p>
+          </div>
+          <div class="actions">
+            <button class="btn" type="button" data-toast="Exportação simulada — em breve gera um .xlsx pela API.">Exportar</button>
+            <button class="btn primary" type="button" data-go="enriquecer">+ Novo EAN</button>
+          </div>
+        </div>
+        <div class="kpis" role="group" aria-label="Filtrar por status">
+          <button class="kpi click on" type="button" data-filter="todos" aria-pressed="true"><div class="k">Total</div><div class="v">12.739</div><div class="s">todos os cadastros</div></button>
+          <button class="kpi click" type="button" data-filter="pendente" aria-pressed="false"><div class="k">Pendentes</div><div class="v">1.208</div><div class="s">aguardando enriquecimento</div></button>
+          <button class="kpi click" type="button" data-filter="concluido" aria-pressed="false"><div class="k">Concluídos</div><div class="v">11.519</div><div class="s">prontos para o e-commerce</div></button>
+          <button class="kpi click" type="button" data-filter="validacao" aria-pressed="false"><div class="k">Validação humana</div><div class="v">12</div><div class="s">medicamento sem CMED</div></button>
+        </div>
+        <div class="filters">
+          <div class="search-wrap">
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+            <input class="search" id="searchInput" type="search" placeholder="Buscar produto, marca ou EAN" aria-label="Buscar produto, marca ou EAN" />
+          </div>
+          <div role="group" aria-label="Filtrar por tipo" style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="chip" type="button" data-tipo="" aria-pressed="true">Todos</button>
+            <button class="chip" type="button" data-tipo="medicamento" aria-pressed="false">Medicamento</button>
+            <button class="chip" type="button" data-tipo="nao-medicamento" aria-pressed="false">Não medicamento</button>
+            <button class="chip" type="button" data-tipo="tarja-vermelha" aria-pressed="false">Tarja vermelha</button>
+          </div>
+        </div>
+        <div class="list">
+          <div class="cols head">
+            <span></span>
+            <span>Produto / EAN</span>
+            <span>Marca</span>
+            <span>Categoria</span>
+            <span>Origem</span>
+            <span>Status</span>
+            <span></span>
+          </div>
+          <div id="filaRows">
+            <div class="cols item" role="button" tabindex="0" data-go="ficha"
+              data-status="concluido" data-tipo="nao-medicamento" data-tarja=""
+              data-search="kit seda ceramidas 300ml seda 7891150097377">
+              <div class="thumb">SEDA</div>
+              <div>
+                <div class="val">Kit Seda Ceramidas 300ml</div>
+                <div class="ean">7891150097377 <button class="copy" type="button" data-copy="7891150097377">copiar</button></div>
+              </div>
+              <div><span class="lbl">Marca</span><div class="val">Seda</div>Não medicamento</div>
+              <div><span class="lbl">Categoria</span><div class="val">Cabelos</div>Shampoo e condicionador</div>
+              <div><span class="lbl">Origem</span><div class="val">crawler + Claude</div></div>
+              <div><span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Concluído</span></div>
+              <div class="chev" aria-hidden="true">›</div>
+            </div>
+            <div class="cols item" role="button" tabindex="0" data-go="ficha"
+              data-status="concluido" data-tipo="medicamento" data-tarja="vermelha"
+              data-search="dipirona monoidratada 500mg 20 comprimidos ems 7891010245889">
+              <div class="thumb">EMS</div>
+              <div>
+                <div class="val">Dipirona Monoidratada 500mg 20 comprimidos</div>
+                <div class="ean">7891010245889 <button class="copy" type="button" data-copy="7891010245889">copiar</button></div>
+              </div>
+              <div><span class="lbl">Marca</span><div class="val">EMS</div>Medicamento</div>
+              <div><span class="lbl">Tarja</span><span class="pill danger">Tarja vermelha</span></div>
+              <div><span class="lbl">Origem</span><div class="val">anvisa_cmed</div></div>
+              <div><span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Concluído</span></div>
+              <div class="chev" aria-hidden="true">›</div>
+            </div>
+            <div class="cols item" role="button" tabindex="0" data-go="enriquecer"
+              data-status="pendente" data-tipo="" data-tarja=""
+              data-search="creme hidratante 200ml 7896098900123">
+              <div class="thumb">?</div>
+              <div>
+                <div class="val">Creme hidratante 200ml</div>
+                <div class="ean">7896098900123 <button class="copy" type="button" data-copy="7896098900123">copiar</button></div>
+              </div>
+              <div><span class="lbl">Marca</span><div class="val">—</div>sem classificação</div>
+              <div><span class="lbl">Categoria</span><div class="val">—</div></div>
+              <div><span class="lbl">Origem</span><div class="val">—</div></div>
+              <div><span class="pill warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>Pendente</span></div>
+              <div class="chev" aria-hidden="true">›</div>
+            </div>
+            <div class="cols item" role="button" tabindex="0" data-go="ficha"
+              data-status="concluido" data-tipo="nao-medicamento" data-tarja=""
+              data-search="nivea creme lata 150ml nivea 4005808158074">
+              <div class="thumb">NIV</div>
+              <div>
+                <div class="val">Nivea Creme Lata 150ml</div>
+                <div class="ean">4005808158074 <button class="copy" type="button" data-copy="4005808158074">copiar</button></div>
+              </div>
+              <div><span class="lbl">Marca</span><div class="val">Nivea</div>Não medicamento</div>
+              <div><span class="lbl">Categoria</span><div class="val">Pele</div>Hidratantes</div>
+              <div><span class="lbl">Origem</span><div class="val">IQVIA + Claude</div></div>
+              <div><span class="pill ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>Concluído</span></div>
+              <div class="chev" aria-hidden="true">›</div>
+            </div>
+            <div class="cols item" role="button" tabindex="0" data-go="validacao"
+              data-status="validacao" data-tipo="medicamento" data-tarja="vermelha"
+              data-search="fitoterapico exemplo 30 capsulas herbarium 7891234000999">
+              <div class="thumb">FIT</div>
+              <div>
+                <div class="val">Fitoterápico exemplo 30 cápsulas</div>
+                <div class="ean">7891234000999 <button class="copy" type="button" data-copy="7891234000999">copiar</button></div>
+              </div>
+              <div><span class="lbl">Marca</span><div class="val">Herbarium</div>Medicamento</div>
+              <div><span class="lbl">Tarja</span><span class="pill danger">Tarja vermelha</span></div>
+              <div><span class="lbl">Origem</span><div class="val">Claude / web</div></div>
+              <div><span class="pill warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>Revisar</span></div>
+              <div class="chev" aria-hidden="true">›</div>
+            </div>
+          </div>
+          <div class="empty-state hidden" id="filaEmpty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+            <p>Nenhum produto encontrado para esse filtro/busca.</p>
+            <button class="btn" type="button" id="clearFilters">Limpar filtros</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="validacao" class="screen hidden">
+        <div class="page-head">
+          <div>
+            <h1>Validação humana</h1>
+            <p class="sub">Só o que a API marcou como precisa_validacao_humana</p>
+          </div>
+        </div>
+        <div class="alert" role="status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+          <span>Estes medicamentos não vieram da CMED. Confira tarja e registro MS antes de publicar no e-commerce.</span>
+        </div>
+        <div class="list">
+          <div class="cols head">
+            <span></span>
+            <span>Produto / EAN</span>
+            <span>Origem</span>
+            <span>Tarja</span>
+            <span>Motivo</span>
+            <span>Status</span>
+            <span></span>
+          </div>
+          <div class="cols item" role="button" tabindex="0" data-go="ficha">
+            <div class="thumb">FIT</div>
+            <div>
+              <div class="val">Fitoterápico exemplo 30 cápsulas</div>
+              <div class="ean">7891234000999 <button class="copy" type="button" data-copy="7891234000999">copiar</button></div>
+            </div>
+            <div><div class="val">Claude / web</div></div>
+            <div><span class="pill danger">Tarja vermelha</span></div>
+            <div>sem CMED</div>
+            <div><span class="pill warn">Revisar</span></div>
+            <div class="chev" aria-hidden="true">›</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="ficha" class="screen hidden">
+        <div class="page-head">
+          <div>
+            <p class="breadcrumb">
+              <button type="button" data-go="fila">Fila</button>
+              <span aria-hidden="true">›</span>
+              <span>7891150097377</span>
+            </p>
+            <h1>Kit Seda Ceramidas 300ml</h1>
+            <p class="sub ean">EAN 7891150097377 · crawler + Claude</p>
+          </div>
+          <div class="actions">
+            <button class="btn" type="button" data-toast="Histórico ainda não disponível neste protótipo.">Histórico</button>
+            <button class="btn" type="button" data-go="fontes">Consultar fontes</button>
+            <button class="btn primary" type="button" data-go="enriquecer">Reenriquecer</button>
+          </div>
+        </div>
+        <div class="detail">
+          <div class="photo-card">
+            <div class="photo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5-9 9"/></svg>
+              <span class="photo-name">7891150097377.jpg</span>
+            </div>
+            <p class="sub">Arquivo local no backend, nomeado pelo EAN.</p>
+            <span class="pill ok">Não medicamento</span>
+          </div>
+          <div class="panel">
+            <div class="group">
+              <h3>Identidade</h3>
+              <div class="grid2">
+                <div class="cell"><span class="lbl">Marca</span><div class="val">Seda</div></div>
+                <div class="cell"><span class="lbl">Fabricante</span><div class="val">Unilever</div></div>
+                <div class="cell"><span class="lbl">Tipo</span><div class="val">Não medicamento</div></div>
+                <div class="cell"><span class="lbl">Status</span><span class="pill ok">Concluído</span></div>
+              </div>
+            </div>
+            <div class="group">
+              <h3>Categoria oficial</h3>
+              <div class="grid2">
+                <div class="cell"><span class="lbl">Departamento</span><div class="val">Higiene e beleza</div></div>
+                <div class="cell"><span class="lbl">Categoria</span><div class="val">Cabelos</div></div>
+                <div class="cell wide"><span class="lbl">Subcategoria</span><div class="val">Shampoo e condicionador</div></div>
+              </div>
+            </div>
+            <div class="group">
+              <h3>Conteúdo</h3>
+              <div class="cell"><span class="lbl">Descrição curta</span><div class="val">Kit com shampoo e condicionador da linha Ceramidas, 300 ml cada.</div></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="enriquecer" class="screen hidden">
+        <div class="page-head">
+          <div>
+            <h1>Enriquecer EAN</h1>
+            <p class="sub">A tela não espera os 60–120s: dispara o job e acompanha as etapas.</p>
+          </div>
+        </div>
+        <div class="job">
+          <div class="job-form">
+            <div class="field">
+              <label for="jobEan">EAN</label>
+              <input id="jobEan" value="7896098900123" />
+            </div>
+            <div class="field">
+              <label for="jobNome">Nome do produto</label>
+              <input id="jobNome" value="Creme hidratante 200ml" />
+            </div>
+            <button class="btn primary" type="button" id="jobStart">Disparar job</button>
+          </div>
+          <div class="job-track">
+            <div class="progress"><div id="jobProgress"></div></div>
+            <ul class="steps" id="jobSteps">
+              <li>CMED</li>
+              <li>ABCFarma</li>
+              <li>IQVIA</li>
+              <li>Crawler nas farmácias</li>
+              <li>Claude formata o cadastro</li>
+              <li>Salva no catálogo e grava a imagem</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="categorias" class="screen hidden">
+        <div class="page-head">
+          <div>
+            <h1>Árvore oficial</h1>
+            <p class="sub">O cadastro só pode usar combinações desta lista.</p>
+          </div>
+        </div>
+        <div class="list">
+          <div class="cols head cat-head">
+            <span>Tipo</span>
+            <span>Departamento</span>
+            <span>Categoria</span>
+            <span>Subcategoria</span>
+          </div>
+          <div class="cols item cat-row">
+            <div><span class="pill danger">Medicamento</span></div>
+            <div>Dor e febre</div>
+            <div>Analgésicos</div>
+            <div>Dipirona</div>
+          </div>
+          <div class="cols item cat-row">
+            <div><span class="pill danger">Medicamento</span></div>
+            <div>Gripe e resfriado</div>
+            <div>Antigripais</div>
+            <div>—</div>
+          </div>
+          <div class="cols item cat-row">
+            <div><span class="pill ok">Não medicamento</span></div>
+            <div>Higiene e beleza</div>
+            <div>Cabelos</div>
+            <div>Shampoo e condicionador</div>
+          </div>
+          <div class="cols item cat-row">
+            <div><span class="pill ok">Não medicamento</span></div>
+            <div>Higiene e beleza</div>
+            <div>Pele</div>
+            <div>Hidratantes</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="fontes" class="screen hidden">
+        <div class="page-head">
+          <div>
+            <h1>Fontes oficiais</h1>
+            <p class="sub">Consulta CMED, ABCFarma e IQVIA sem gastar token.</p>
+          </div>
+        </div>
+        <div class="job">
+          <div class="job-form">
+            <div class="field">
+              <label for="fontesEan">EAN</label>
+              <input id="fontesEan" value="7891010245889" />
+            </div>
+            <button class="btn primary" type="button" id="fontesBtn">Consultar</button>
+          </div>
+          <div class="job-track">
+            <div class="grid2" id="fontesResult">
+              <div class="cell"><span class="lbl">CMED</span><div class="val">Encontrado</div>tarja e registro MS</div>
+              <div class="cell"><span class="lbl">ABCFarma</span><div class="val">Encontrado</div></div>
+              <div class="cell wide"><span class="lbl">IQVIA</span><div class="val">—</div>sem cobertura para este EAN</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    </div>
+  </div>
+
+  <div class="toast-region" id="toastRegion" role="status" aria-live="polite"></div>
+
+  <script>
+    const sidebar = document.getElementById("sidebar");
+    const overlay = document.getElementById("overlay");
+
+    // ---------- toast ----------
+    function showToast(message) {
+      const region = document.getElementById("toastRegion");
+      const el = document.createElement("div");
+      el.className = "toast";
+      el.textContent = message;
+      region.appendChild(el);
+      requestAnimationFrame(() => el.classList.add("show"));
+      setTimeout(() => {
+        el.classList.remove("show");
+        setTimeout(() => el.remove(), 220);
+      }, 2600);
+    }
+    document.querySelectorAll("[data-toast]").forEach((el) => {
+      el.addEventListener("click", (event) => {
+        event.stopPropagation();
+        showToast(el.dataset.toast);
+      });
+    });
+
+    // ---------- navigation ----------
+    function go(id) {
+      document.querySelectorAll(".screen").forEach((el) => {
+        el.classList.toggle("hidden", el.id !== id);
+      });
+      document.querySelectorAll(".nav button[data-go]").forEach((el) => {
+        if (el.dataset.go === id) el.setAttribute("aria-current", "page");
+        else el.removeAttribute("aria-current");
+      });
+      closeMenu();
+      window.scrollTo({ top: 0 });
+    }
+
+    document.querySelectorAll("[data-go]").forEach((el) => {
+      el.addEventListener("click", (event) => {
+        event.stopPropagation();
+        go(el.dataset.go);
+      });
+      if (el.getAttribute("role") === "button") {
+        el.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            go(el.dataset.go);
+          }
+        });
+      }
+    });
+
+    // ---------- mobile drawer ----------
+    const menuOpenBtn = document.getElementById("menuOpen");
+    const menuCloseBtn = document.getElementById("menuClose");
+    function openMenu() {
+      sidebar.classList.add("open");
+      overlay.classList.add("show");
+      menuOpenBtn.setAttribute("aria-expanded", "true");
+    }
+    function closeMenu() {
+      sidebar.classList.remove("open");
+      overlay.classList.remove("show");
+      menuOpenBtn.setAttribute("aria-expanded", "false");
+    }
+    menuOpenBtn.addEventListener("click", openMenu);
+    menuCloseBtn.addEventListener("click", closeMenu);
+    overlay.addEventListener("click", closeMenu);
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeMenu();
+    });
+
+    // ---------- fila: kpi + chip + search filtering ----------
+    const filaRows = Array.from(document.querySelectorAll("#filaRows .item"));
+    const filaEmpty = document.getElementById("filaEmpty");
+    let statusFilter = "todos";
+    let tipoFilter = "";
+    let searchQuery = "";
+
+    function applyFilaFilters() {
+      let visibleCount = 0;
+      filaRows.forEach((row) => {
+        const statusOk = statusFilter === "todos" || row.dataset.status === statusFilter;
+        const tipoOk =
+          tipoFilter === "" ||
+          row.dataset.tipo === tipoFilter ||
+          (tipoFilter === "tarja-vermelha" && row.dataset.tarja === "vermelha");
+        const searchOk = !searchQuery || row.dataset.search.includes(searchQuery);
+        const visible = statusOk && tipoOk && searchOk;
+        row.classList.toggle("hidden", !visible);
+        if (visible) visibleCount += 1;
+      });
+      filaEmpty.classList.toggle("hidden", visibleCount > 0);
+    }
+
+    document.querySelectorAll(".kpi.click").forEach((el) => {
+      el.addEventListener("click", () => {
+        document.querySelectorAll(".kpi.click").forEach((k) => {
+          k.classList.remove("on");
+          k.setAttribute("aria-pressed", "false");
+        });
+        el.classList.add("on");
+        el.setAttribute("aria-pressed", "true");
+        statusFilter = el.dataset.filter;
+        if (statusFilter === "validacao") {
+          go("validacao");
+          return;
+        }
+        applyFilaFilters();
+      });
+    });
+
+    document.querySelectorAll('.filters .chip[data-tipo]').forEach((el) => {
+      el.addEventListener("click", () => {
+        document.querySelectorAll('.filters .chip[data-tipo]').forEach((c) => c.setAttribute("aria-pressed", "false"));
+        el.setAttribute("aria-pressed", "true");
+        tipoFilter = el.dataset.tipo;
+        applyFilaFilters();
+      });
+    });
+
+    const searchInput = document.getElementById("searchInput");
+    searchInput.addEventListener("input", () => {
+      searchQuery = searchInput.value.trim().toLowerCase();
+      applyFilaFilters();
+    });
+
+    document.getElementById("clearFilters").addEventListener("click", () => {
+      statusFilter = "todos";
+      tipoFilter = "";
+      searchQuery = "";
+      searchInput.value = "";
+      document.querySelectorAll(".kpi.click").forEach((k, i) => {
+        k.classList.toggle("on", i === 0);
+        k.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+      });
+      document.querySelectorAll('.filters .chip[data-tipo]').forEach((c) => c.setAttribute("aria-pressed", c.dataset.tipo === ""));
+      applyFilaFilters();
+    });
+
+    // ---------- copy EAN ----------
+    document.querySelectorAll(".copy").forEach((el) => {
+      el.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        const ean = el.dataset.copy;
+        try {
+          await navigator.clipboard.writeText(ean);
+        } catch (err) {
+          /* clipboard indisponível neste contexto — segue sem travar a ação */
+        }
+        const original = el.textContent;
+        el.textContent = "copiado";
+        showToast(`EAN ${ean} copiado.`);
+        setTimeout(() => { el.textContent = original; }, 1200);
+      });
+    });
+
+    // ---------- enriquecer: job simulation ----------
+    const jobStartBtn = document.getElementById("jobStart");
+    const jobSteps = Array.from(document.querySelectorAll("#jobSteps li"));
+    const jobProgress = document.getElementById("jobProgress");
+    let jobRunning = false;
+
+    jobStartBtn.addEventListener("click", () => {
+      if (jobRunning) return;
+      jobRunning = true;
+      jobSteps.forEach((li) => li.classList.remove("done", "now"));
+      jobProgress.style.width = "0%";
+      const eanInput = document.getElementById("jobEan");
+      const nomeInput = document.getElementById("jobNome");
+      eanInput.disabled = true;
+      nomeInput.disabled = true;
+      jobStartBtn.disabled = true;
+      jobStartBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Processando…';
+
+      let index = 0;
+      const total = jobSteps.length;
+      const tick = () => {
+        if (index > 0) {
+          jobSteps[index - 1].classList.remove("now");
+          jobSteps[index - 1].classList.add("done");
+        }
+        if (index < total) {
+          jobSteps[index].classList.add("now");
+          jobProgress.style.width = `${Math.round((index / total) * 100)}%`;
+          index += 1;
+          setTimeout(tick, 550);
+        } else {
+          jobProgress.style.width = "100%";
+          jobRunning = false;
+          eanInput.disabled = false;
+          nomeInput.disabled = false;
+          jobStartBtn.disabled = false;
+          jobStartBtn.textContent = "Disparar job";
+          showToast(`Cadastro do EAN ${eanInput.value} concluído.`);
+        }
+      };
+      tick();
+    });
+
+    // ---------- fontes: mock lookup ----------
+    const fontesBtn = document.getElementById("fontesBtn");
+    fontesBtn.addEventListener("click", () => {
+      const result = document.getElementById("fontesResult");
+      const original = fontesBtn.textContent;
+      fontesBtn.disabled = true;
+      fontesBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Consultando…';
+      result.style.opacity = "0.35";
+      setTimeout(() => {
+        fontesBtn.disabled = false;
+        fontesBtn.textContent = original;
+        result.style.opacity = "1";
+        showToast(`Fontes consultadas para EAN ${document.getElementById("fontesEan").value}.`);
+      }, 700);
+    });
+  </script>
+</body>
+</html>
