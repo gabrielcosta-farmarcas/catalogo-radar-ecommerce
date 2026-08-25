@@ -4,6 +4,12 @@
 
 1. [ ] Mapear as tabelas do banco (`produtos`, `anvisa_medicamentos`, `abcfarma_medicamentos`, `iqvia_produtos`, `categorias`, entre outras usadas em `db.py` / `app/db.py`) e entender onde dá pra usar FK entre elas e o que precisa ser padronizado antes disso.
 
+
+
+
+
+
+
 ## O que o projeto faz
 
 Pipeline e API para enriquecer automaticamente o cadastro de produtos de e-commerce a partir do EAN — nome, descrição, categoria, imagem e dados regulatórios de medicamentos — cruzando bases oficiais, crawlers de concorrentes e busca agentic via Claude.
