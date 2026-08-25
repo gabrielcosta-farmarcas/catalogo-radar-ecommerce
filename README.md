@@ -1,8 +1,12 @@
 # Catálogo Radar E-commerce
 
-Pipeline e API para enriquecer automaticamente o cadastro de produtos de e-commerce a partir do EAN — nome, descrição, categoria, imagem e dados regulatórios de medicamentos — cruzando bases oficiais, crawlers de concorrentes e busca agentic via Claude.
+## Backlog
+
+1. [ ] Mapear as tabelas do banco (`produtos`, `anvisa_medicamentos`, `abcfarma_medicamentos`, `iqvia_produtos`, `categorias`, entre outras usadas em `db.py` / `app/db.py`) e entender onde dá pra usar FK entre elas e o que precisa ser padronizado antes disso.
 
 ## O que o projeto faz
+
+Pipeline e API para enriquecer automaticamente o cadastro de produtos de e-commerce a partir do EAN — nome, descrição, categoria, imagem e dados regulatórios de medicamentos — cruzando bases oficiais, crawlers de concorrentes e busca agentic via Claude.
 
 Dado um EAN pendente de cadastro, o pipeline (`enrich_com_crawler.py`) tenta preencher os dados do produto em camadas, da mais barata/confiável para a mais cara, parando na primeira que encontra algo aproveitável:
 
@@ -44,22 +48,3 @@ Rodar o pipeline via CLI:
 ```bash
 python enrich_com_crawler.py --eans 7891234567890,7899876543210 --limit 20
 ```
-
-## Backlog
-
-### Em validação / próximos passos
-- [ ] Sair do protótipo estático (`prototipo-frontend/`) para um frontend real integrado à API (`/api/v1`).
-- [ ] Revisar a fila de `precisa_validacao_humana=Sim` com um fluxo de aprovação/rejeição na UI, em vez de consulta manual.
-- [ ] Cobrir novos adapters de crawler para farmácias/concorrentes ainda não mapeados em `crawler/adapters/`.
-- [ ] Monitorar e alertar sobre esgotamento de crédito Anthropic (hoje só há checagem manual via `GET /anthropic/credito`).
-
-### Débitos técnicos
-- [ ] Adicionar testes automatizados para os serviços da API (`app/services/`) e para o pipeline de enriquecimento — hoje não há suíte de testes no repositório.
-- [ ] Extrair a lógica de carga (`carregar_*.py`) e o pipeline (`enrich_produtos.py`, `enrich_com_crawler.py`) para dentro do pacote `app/`, reduzindo scripts soltos na raiz.
-- [ ] Avaliar mover `produtos_exportados.xlsx` (usado como export/planilha de apoio) para fora do versionamento, já que o banco de trabalho passou a ser o Postgres.
-- [ ] Documentar o schema das tabelas (`produtos`, `anvisa_medicamentos`, `abcfarma_medicamentos`, `iqvia_produtos`, `categorias`) usadas por `db.py`.
-
-### Ideias / explorar
-- [ ] Job assíncrono em fila (hoje `POST /enriquecer/jobs` + polling) evoluir para notificação via webhook quando concluir.
-- [ ] Expor no `/health` também o status de cada fonte oficial (CMED/ABCFarma/IQVIA) e do crawler, não só do Postgres e da Anthropic.
-- [ ] Cache de resultados de crawler por EAN para evitar re-scrape em reprocessamentos.
