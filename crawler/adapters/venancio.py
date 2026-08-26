@@ -2,6 +2,7 @@ import json
 
 from ..base import SiteAdapter, html_to_text, ean_igual
 from ..models import ProductResult
+from dominios import TARJA_PRETA, TARJA_SEM
 
 PICK = "__pickRuntime=appsEtag%2Cblocks%2CblocksTree%2Ccomponents%2CcontentMap%2Cextensions%2Cmessages%2Cpage%2Cpages%2Cquery%2CqueryData%2Croute%2CruntimeMeta%2Csettings"
 
@@ -20,9 +21,9 @@ def _mapear_generico(genericos_flag, tipo_medicamento):
     tentar ler o texto de "Tipo Medicamento" (usado só como fallback).
     """
     if genericos_flag is not None:
-        return "Sim" if str(genericos_flag).strip() == "1" else "Não"
+        return True if str(genericos_flag).strip() == "1" else False
     if tipo_medicamento:
-        return "Sim" if "gener" in tipo_medicamento.strip().lower().replace("é", "e") else "Não"
+        return True if "gener" in tipo_medicamento.strip().lower().replace("é", "e") else False
     return None
 
 
@@ -37,9 +38,9 @@ def _mapear_tarja(venda_controlada, tipo_receita):
     if venda_controlada is None:
         return None
     if str(venda_controlada).strip().upper() != "SIM":
-        return "Sem Tarja"
+        return TARJA_SEM
     if tipo_receita and "amarela" in str(tipo_receita).lower():
-        return "Tarja Preta"
+        return TARJA_PRETA
     return None
 
 

@@ -3,6 +3,7 @@ import re
 
 from ..base import SiteAdapter
 from ..models import ProductResult
+from dominios import parse_tarja
 
 # sara.com.br serve os arquivos (imagem, bula em PDF) com caminho relativo -
 # esse é o host que os hospeda (visto no <link rel="preconnect"> da própria
@@ -41,18 +42,8 @@ def _extrair_props_apresentacao(html):
 
 
 def _mapear_tarja(stripe):
-    """stripe vem em texto livre (ex: "Tarja vermelha") - normaliza pro
-    vocabulário fechado usado no resto do sistema."""
-    if not stripe:
-        return None
-    texto = stripe.upper()
-    if "PRETA" in texto:
-        return "Tarja Preta"
-    if "VERMELHA" in texto:
-        return "Tarja Vermelha"
-    if "SEM TARJA" in texto or "ISENTO" in texto:
-        return "Sem Tarja"
-    return None
+    """stripe vem em texto livre (ex: "Tarja vermelha") - normaliza pro código."""
+    return parse_tarja(stripe)
 
 
 def _mapear_generico(regulatory_class):
@@ -60,7 +51,7 @@ def _mapear_generico(regulatory_class):
     Genérico/Biológico/...) - só "Genérico" conta como genérico de verdade."""
     if not regulatory_class:
         return None
-    return "Sim" if regulatory_class.strip().lower() == "genérico" else "Não"
+    return True if regulatory_class.strip().lower() == "genérico" else False
 
 
 def _limpar_texto(valor):

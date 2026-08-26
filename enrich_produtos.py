@@ -36,6 +36,16 @@ from anthropic import Anthropic, APIStatusError, APIConnectionError
 from PIL import Image, UnidentifiedImageError
 
 import categorias
+import dominios
+from dominios import (
+    TARJA_NAO_APLICAVEL,
+    TARJA_PRETA,
+    TARJA_VERMELHA,
+    TIPO_NAO_MEDICAMENTO,
+    eh_medicamento,
+    eh_verdadeiro,
+    nome_tipo_produto,
+)
 
 
 def _carregar_dotenv():
@@ -210,7 +220,7 @@ RESULT_COLUMNS = [
     "titulo",
     "marca",
     "fabricante",
-    "tipo_cadastro",
+    "tipo_produto",
     "registro_ms",
     "generico",
     "tarja",
@@ -218,9 +228,7 @@ RESULT_COLUMNS = [
     "principios_ativos",
     "descricao_curta",
     "frase_obrigatoria",
-    "departamento",
-    "categoria",
-    "subcategoria",
+    "categoria_id",
     "imagem_url",
     "pagina_produto_url",
     "preco_pesquisado",
@@ -303,36 +311,36 @@ def marcar_validacao_humana(data):
     so_abcfarma = origem.startswith(ORIGEM_ABCFARMA)
     so_iqvia = origem.startswith(ORIGEM_IQVIA)
     so_crawler = origem.startswith("crawler")
-    medicamento = data.get("tipo_cadastro") == "Medicamento"
-    tarja_bulario = data.get("tarja_confirmada_bulario") == "Sim"
-    tarja_mip_iqvia = data.get("tarja_confirmada_iqvia_mip") == "Sim"
+    medicamento = eh_medicamento(data)
+    tarja_bulario = eh_verdadeiro(data.get("tarja_confirmada_bulario"))
+    tarja_mip_iqvia = eh_verdadeiro(data.get("tarja_confirmada_iqvia_mip"))
     if medicamento and so_web:
-        data[VALIDACAO_HUMANA_COLUMN] = "Sim"
+        data[VALIDACAO_HUMANA_COLUMN] = True
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CLAUDE_MEDICAMENTO
     elif medicamento and so_cmed and not data.get("tarja"):
         # CMED confirmou o medicamento mas não informou a tarja (campo
         # "- (*)") - ver mapear_cmed_para_schema em enrich_com_crawler.py,
         # que já não tenta cruzar com substancias_controladas nesse caso
         # (sem saber a cor da tarja, não dá pra confiar na retenção também)
-        data[VALIDACAO_HUMANA_COLUMN] = "Sim"
+        data[VALIDACAO_HUMANA_COLUMN] = True
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CMED_TARJA
     elif medicamento and so_abcfarma and not data.get("tarja"):
-        data[VALIDACAO_HUMANA_COLUMN] = "Sim"
+        data[VALIDACAO_HUMANA_COLUMN] = True
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_ABCFARMA_TARJA
     elif medicamento and so_iqvia and not data.get("tarja"):
-        data[VALIDACAO_HUMANA_COLUMN] = "Sim"
+        data[VALIDACAO_HUMANA_COLUMN] = True
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_IQVIA_TARJA
     elif medicamento and so_abcfarma and not tarja_bulario:
-        data[VALIDACAO_HUMANA_COLUMN] = "Sim"
+        data[VALIDACAO_HUMANA_COLUMN] = True
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CRAWLER_TARJA
     elif medicamento and so_iqvia and not (tarja_bulario or tarja_mip_iqvia):
-        data[VALIDACAO_HUMANA_COLUMN] = "Sim"
+        data[VALIDACAO_HUMANA_COLUMN] = True
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CRAWLER_TARJA
     elif medicamento and so_crawler and (not data.get("tarja") or not tarja_bulario):
-        data[VALIDACAO_HUMANA_COLUMN] = "Sim"
+        data[VALIDACAO_HUMANA_COLUMN] = True
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CRAWLER_TARJA
     else:
-        data[VALIDACAO_HUMANA_COLUMN] = "Não"
+        data[VALIDACAO_HUMANA_COLUMN] = False
         data[MENSAGEM_VALIDACAO_COLUMN] = None
     return data
 
@@ -389,22 +397,23 @@ def extract_json(text):
     """
     Extrai o objeto JSON de um texto de resposta, mesmo quando o modelo o
     envolve em comentários e/ou cercas de markdown (ex: 'Aqui está o
-    resultado:\n```json\n{...}\n```').
+    resultado:\\n```json\\n{...}\\n```'). Converte rótulos do modelo
+    (Medicamento, Tarja Vermelha, Sim/Não) pro vocabulário persistido.
     """
     text = text.strip()
 
-    # 1. bloco de código ```json ... ``` em qualquer posição do texto
     fence_match = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
     if fence_match:
-        return json.loads(fence_match.group(1))
-
-    # 2. fallback: do primeiro '{' ao último '}' do texto
-    start, end = text.find("{"), text.rfind("}")
-    if start != -1 and end != -1 and end > start:
-        return json.loads(text[start : end + 1])
-
-    # 3. último recurso: assume que o texto já é JSON puro
-    return json.loads(text)
+        data = json.loads(fence_match.group(1))
+    else:
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            data = json.loads(text[start : end + 1])
+        else:
+            data = json.loads(text)
+    if isinstance(data, dict):
+        dominios.normalizar_cadastro(data)
+    return data
 
 
 def get_final_text(response):
@@ -741,7 +750,7 @@ def formatar_campos_confirmados(
         return {}, usage
 
     mensagem = (
-        f"tipo_cadastro: {tipo_cadastro}\nmarca: {marca}\n"
+        f"tipo_cadastro: {nome_tipo_produto(tipo_cadastro) or tipo_cadastro}\nmarca: {marca}\n"
         f"fabricante (use só se marca vier vazia e o produto for genérico - "
         f"nesse caso vai no título como \"[Fabricante] Genérico\", com o "
         f"nome curto de mercado, não a razão social completa): {fabricante}\n"
@@ -752,7 +761,7 @@ def formatar_campos_confirmados(
         f"categoria bruta do site (referência, pode não bater com nossa "
         f"árvore - não copie): {categoria_bruta}\n"
     )
-    if tipo_cadastro == "Não Medicamento":
+    if tipo_cadastro == TIPO_NAO_MEDICAMENTO:
         mensagem += (
             "\nTítulo de não-medicamento: [O que o produto é] [Marca] [Linha] "
             "[Atributo] [Volume/Qtd]. Comece pelo tipo do objeto (Pomada, Fio "
@@ -828,7 +837,7 @@ def categorizar_apos_busca(
     if not data.get("titulo"):
         return data, usage
 
-    tipo = (data.get("tipo_cadastro") or "").strip()
+    tipo = data.get("tipo_produto")
     if tipo not in ARVORES_POR_RAMO:
         return data, usage
 
@@ -837,7 +846,7 @@ def categorizar_apos_busca(
         return data, usage
 
     mensagem = (
-        f"tipo_cadastro: {tipo}\n"
+        f"tipo_cadastro: {nome_tipo_produto(tipo) or tipo}\n"
         f"titulo: {data.get('titulo') or nome_produto}\n"
         f"marca: {data.get('marca')}\n"
         f"principios_ativos: {data.get('principios_ativos')}\n"
@@ -1218,7 +1227,7 @@ def _ferramentas_tarja(max_uses=2):
         },
     ]
 
-ALLOWED_TARJA = {"Sem Tarja", "Tarja Vermelha", "Tarja Preta", "Não aplicável"}
+ALLOWED_TARJA = set(dominios.TARJAS)
 
 # prefixo de origem_enriquecimento usado pela camada 0 (cmed.py, ver
 # enrich_com_crawler.py) - mesmo valor de cmed.ORIGEM_ANVISA_CMED, duplicado
@@ -1510,27 +1519,42 @@ def salvar_imagem_local(ean, image_url, conteudo=None):
 
 def validar_categorizacao(data):
     """
-    Confere se (departamento, categoria, subcategoria) devolvidos pelo modelo
-    realmente existem na árvore oficial (tabela `categorias` no Postgres),
-    em vez de confiar que o modelo seguiu a instrução do prompt. Sem a árvore
-    carregada (COMBINACOES_CATEGORIZACAO_VALIDAS vazio), não valida - não dá
-    para diferenciar "categoria inventada" de "taxonomia indisponível".
-    Retorna (ok: bool, motivo: str|None).
+    Confere a categorização contra a árvore oficial (tabela `categorias`) e
+    grava `categoria_id` da folha. Aceita id já resolvido (de-para) ou o
+    trio textual da IA. Sem a árvore carregada, não valida. Retorna
+    (ok: bool, motivo: str|None).
     """
     departamento = data.get("departamento")
     categoria = data.get("categoria")
     subcategoria = data.get("subcategoria")
+    categoria_id = data.get("categoria_id")
 
-    if not departamento and not categoria and not subcategoria:
-        return True, None  # produto legitimamente fora da árvore
-
-    if not COMBINACOES_CATEGORIZACAO_VALIDAS:
+    if not categoria_id and not departamento and not categoria and not subcategoria:
+        categorias.aplicar_folha(data, None)
         return True, None
 
-    tipo = data.get("tipo_cadastro")
-    combinacao = (tipo, departamento, categoria, subcategoria)
-    if combinacao in COMBINACOES_CATEGORIZACAO_VALIDAS:
+    if not categorias.carregar_indice()["combinacoes"]:
+        if categoria_id:
+            categorias.aplicar_folha(data, categoria_id)
         return True, None
+
+    tipo = data.get("tipo_produto")
+    if categoria_id:
+        folha = categorias.por_id(categoria_id)
+        if folha and folha.get("tipo_produto") == tipo:
+            categorias.aplicar_folha(data, folha["id"])
+            return True, None
+        categorias.aplicar_folha(data, None)
+        return False, (
+            f"tipo_cadastro={tipo!r} categoria_id={categoria_id!r} não existe "
+            "na árvore oficial"
+        )
+
+    resolvido = categorias.resolver_id(tipo, departamento, categoria, subcategoria)
+    if resolvido:
+        categorias.aplicar_folha(data, resolvido)
+        return True, None
+    categorias.aplicar_folha(data, None)
     return False, (
         f"tipo_cadastro={tipo!r} departamento={departamento!r} "
         f"categoria={categoria!r} subcategoria={subcategoria!r} não existe "
@@ -1554,13 +1578,13 @@ def compor_frase_obrigatoria(data, tarja, is_medicamento):
     enrich_com_crawler.mapear_cmed_para_schema).
     """
     partes = []
-    if data.get("precisa_retencao_receita") == "Sim":
+    if eh_verdadeiro(data.get("precisa_retencao_receita")):
         partes.append(FRASE_VENDA_PRESCRICAO_RETENCAO)
-    elif tarja in ("Tarja Vermelha", "Tarja Preta"):
+    elif tarja in (TARJA_VERMELHA, TARJA_PRETA):
         partes.append(FRASE_VENDA_PRESCRICAO)
     if is_medicamento:
         partes.append(FRASE_MEDICAMENTO_GERAL)
-    if is_medicamento and data.get("generico") == "Sim":
+    if is_medicamento and eh_verdadeiro(data.get("generico")):
         partes.append(FRASE_GENERICO)
     if data.get("departamento") == "Suplementos Alimentares" and not (
         data.get("categoria") == "Sistema Digestivo"
@@ -1595,14 +1619,15 @@ def apply_safety_checks(data, ean):
     estruturados e loga cada ajuste feito, para dar visibilidade do que o
     modelo errou.
     """
-    is_medicamento = data.get("tipo_cadastro") == "Medicamento"
+    dominios.normalizar_cadastro(data)
+    is_medicamento = eh_medicamento(data)
 
     # não-medicamento nunca tem tarja nem retenção de receita - carimba os
     # dois campos aqui em vez de deixar null/ambíguo (a fonte não confirma
     # isso porque a pergunta não se aplica, não porque falhou em confirmar).
     if not is_medicamento:
-        data["tarja"] = "Não aplicável"
-        data["precisa_retencao_receita"] = "Não"
+        data["tarja"] = TARJA_NAO_APLICAVEL
+        data["precisa_retencao_receita"] = False
 
     # tarja fora do vocabulário fechado = alucinação, zera.
     tarja = data.get("tarja")
@@ -1623,7 +1648,7 @@ def apply_safety_checks(data, ean):
     # confirmada e deve continuar sendo zerado por essa regra.
     origem_enriquecimento_str = str(data.get("origem_enriquecimento") or "")
     origem_e_cmed = origem_enriquecimento_str.startswith(ORIGEM_ANVISA_CMED)
-    tarja_iqvia_mip_confirmada = data.get("tarja_confirmada_iqvia_mip") == "Sim"
+    tarja_iqvia_mip_confirmada = eh_verdadeiro(data.get("tarja_confirmada_iqvia_mip"))
     origem_confiavel_sem_url = (
         origem_e_cmed
         or origem_enriquecimento_str.startswith(ORIGEM_ABCFARMA)
@@ -1654,7 +1679,7 @@ def apply_safety_checks(data, ean):
     # com o time de negócio (Tarja Preta / Sem Tarja / "- (*)" / Tarja
     # Vermelha cruzada com substancias_controladas) - não sobrescreve.
     if not origem_e_cmed:
-        data["precisa_retencao_receita"] = "Sim" if tarja == "Tarja Preta" else "Não"
+        data["precisa_retencao_receita"] = tarja == TARJA_PRETA
 
     # medicamento nunca leva imagem no e-commerce (regra de negócio) -
     # qualquer tarja, inclusive Sem Tarja / não confirmada. Não-medicamento
@@ -1706,9 +1731,7 @@ def apply_safety_checks(data, ean):
     categorizacao_ok, motivo_categorizacao = validar_categorizacao(data)
     if not categorizacao_ok:
         print(f"  [aviso] categorização inválida para EAN {ean} ({motivo_categorizacao}) - zerada.")
-        data["departamento"] = None
-        data["categoria"] = None
-        data["subcategoria"] = None
+        categorias.aplicar_folha(data, None)
 
     # frase_obrigatoria: recompõe de forma determinística a partir dos campos
     # já validados acima em vez de confiar na composição livre do modelo, que
@@ -1953,9 +1976,9 @@ def call_model(
             usage["cache_read"] += usage_cat["cache_read"]
 
             data = apply_safety_checks(data, ean)
-            data["model"] = model
+            data["modelo"] = model
 
-            if verify_tarja and data.get("tipo_cadastro") == "Medicamento":
+            if verify_tarja and eh_medicamento(data):
                 resultado_verif, usage_verif = verify_tarja_registro(
                     client,
                     model,
@@ -2021,15 +2044,13 @@ def call_model(
                 # precisa_retencao_receita também depende da tarja - mesma
                 # lógica determinística de apply_safety_checks, recalculada
                 # aqui com o valor final pós-verificação dedicada
-                data["precisa_retencao_receita"] = (
-                    "Sim" if data.get("tarja") == "Tarja Preta" else "Não"
-                )
+                data["precisa_retencao_receita"] = data.get("tarja") == TARJA_PRETA
 
                 # medicamento nunca leva imagem - reforço depois da
                 # verificação de tarja, caso algum caminho ainda tenha
                 # preenchido imagem_url.
                 if (
-                    data.get("tipo_cadastro") == "Medicamento"
+                    eh_medicamento(data)
                     and data.get("imagem_url")
                 ):
                     print(
@@ -2084,7 +2105,7 @@ FASES_TERMINAIS = ("concluido", "nao_localizado")
 # colunas gravadas em produtos além de RESULT_COLUMNS/VALIDACAO_COLUMNS - vêm
 # de fontes oficiais (CMED/ABCFarma/IQVIA/crawler) em enrich_com_crawler.py,
 # não da resposta do Claude puro
-COLUNAS_ORIGEM = ["origem_enriquecimento", "confirmado_anvisa_cmed", "origem_categorizacao", "model"]
+COLUNAS_ORIGEM = ["origem_enriquecimento", "confirmado_anvisa_cmed", "origem_categorizacao", "modelo"]
 
 
 def conectar():
@@ -2145,7 +2166,7 @@ def salvar_resultado(conn, ean, data, usage=None):
         conn.commit()
         return
 
-    data = marcar_validacao_humana(data)
+    data = marcar_validacao_humana(dominios.normalizar_cadastro(data))
     colunas = RESULT_COLUMNS + VALIDACAO_COLUMNS + COLUNAS_ORIGEM
     set_clause = ", ".join(f"{col} = %s" for col in colunas)
     valores = [data.get(col) for col in colunas]
@@ -2193,6 +2214,12 @@ def registrar_versao_historico(cur, produto_id, ean, fase_resultado, data, usage
     """
     colunas = RESULT_COLUMNS + VALIDACAO_COLUMNS + COLUNAS_ORIGEM
     dados = {col: data.get(col) for col in colunas}
+    # nomes oficiais no momento da gravação (ponto no tempo); a tabela
+    # produtos só guarda categoria_id, mas o histórico precisa dos textos
+    # pra a ficha antiga continuar legível se a folha for renomeada depois.
+    dados["departamento"] = data.get("departamento")
+    dados["categoria"] = data.get("categoria")
+    dados["subcategoria"] = data.get("subcategoria")
     dados["fase_resultado"] = fase_resultado
     dados["tokens_utilizados"] = usage["tokens"]
     dados["tokens_cache_gravados"] = usage["cache_creation"]
@@ -2214,7 +2241,7 @@ def buscar_ja_ok_nao_cmed(conn, eans=None, limit=None):
                 """
                 SELECT ean, nome_produto FROM produtos
                 WHERE ean = ANY(%s) AND fase_atual = 'concluido'
-                  AND confirmado_anvisa_cmed IS DISTINCT FROM 'Sim'
+                  AND confirmado_anvisa_cmed IS DISTINCT FROM true
                 ORDER BY ean
                 """,
                 (list(eans),),
@@ -2223,7 +2250,7 @@ def buscar_ja_ok_nao_cmed(conn, eans=None, limit=None):
             query = (
                 "SELECT ean, nome_produto FROM produtos "
                 "WHERE fase_atual = 'concluido' "
-                "AND confirmado_anvisa_cmed IS DISTINCT FROM 'Sim' ORDER BY ean"
+                "AND confirmado_anvisa_cmed IS DISTINCT FROM true ORDER BY ean"
             )
             params = []
             if limit is not None:
@@ -2363,7 +2390,7 @@ def main():
                     f"+{usage['cache_creation']} gravados"
                 )
                 revisao = ""
-                if data and data.get(VALIDACAO_HUMANA_COLUMN) == "Sim":
+                if data and eh_verdadeiro(data.get(VALIDACAO_HUMANA_COLUMN)):
                     revisao = " | REVISÃO HUMANA"
                 print(
                     f"[{processed}/{total}] EAN {ean} - {nome_produto} -> {status} "

@@ -14,7 +14,7 @@ class ProductResult:
     dosage: str = None
     quantity: str = None
     ms_register: str = None
-    generico: str = None
+    generico: bool = None
     tarja: str = None
     prescricao_detalhe: str = None
     leaflet_url: str = None

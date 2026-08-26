@@ -28,6 +28,7 @@ from anthropic import Anthropic, APIStatusError, APIConnectionError
 import categorias
 import iqvia
 from db import conectar
+from dominios import TIPO_MEDICAMENTO, TIPO_NAO_MEDICAMENTO
 
 
 def _carregar_dotenv():
@@ -51,21 +52,19 @@ _carregar_dotenv()
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS mapeamento_categoria_iqvia (
     id                    BIGSERIAL PRIMARY KEY,
-    tipo_cadastro         TEXT NOT NULL,
+    tipo_produto          TEXT NOT NULL REFERENCES tipos_produto(codigo),
     area_farmacia         TEXT,
     sub_cat1              TEXT,
     sub_cat2              TEXT,
     sub_cat3              TEXT,
     sub_cat4              TEXT,
-    departamento          TEXT,
-    categoria             TEXT,
-    subcategoria          TEXT,
+    categoria_id          BIGINT REFERENCES categorias(id),
     revisado_humanamente  BOOLEAN NOT NULL DEFAULT false,
     criado_em             TIMESTAMPTZ NOT NULL DEFAULT now(),
     atualizado_em         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS mapeamento_categoria_iqvia_chave ON mapeamento_categoria_iqvia (
-    tipo_cadastro,
+    tipo_produto,
     coalesce(area_farmacia, ''), coalesce(sub_cat1, ''), coalesce(sub_cat2, ''),
     coalesce(sub_cat3, ''), coalesce(sub_cat4, '')
 );
@@ -117,7 +116,7 @@ def extrair_combinacoes_distintas(conn):
     vistos = set()
     combinacoes = []
     for setor, area, s1, s2, s3, s4 in linhas:
-        tipo = "Medicamento" if iqvia.eh_medicamento(setor) else "Não Medicamento"
+        tipo = TIPO_MEDICAMENTO if iqvia.eh_medicamento(setor) else TIPO_NAO_MEDICAMENTO
         chave = (tipo, area, s1, s2, s3, s4)
         if chave in vistos:
             continue
@@ -179,7 +178,7 @@ def popular(model="claude-haiku-4-5-20251001", tamanho_lote=25):
     if not api_key or "COLOQUE_SUA_KEY_AQUI" in api_key:
         sys.exit("Erro: defina uma API key válida da Anthropic (.env na raiz do projeto).")
 
-    combinacoes_validas, arvores_por_ramo = categorias.carregar_arvore()
+    _combinacoes_validas, arvores_por_ramo = categorias.carregar_arvore()
     if not arvores_por_ramo:
         sys.exit("Erro: tabela categorias vazia ou inexistente - rode carregar_categorias.py antes.")
 
@@ -191,7 +190,7 @@ def popular(model="claude-haiku-4-5-20251001", tamanho_lote=25):
 
         gravadas = 0
         zeradas = 0
-        for tipo in ("Medicamento", "Não Medicamento"):
+        for tipo in (TIPO_MEDICAMENTO, TIPO_NAO_MEDICAMENTO):
             do_tipo = [c for c in combinacoes if c[0] == tipo]
             arvore_ramo = arvores_por_ramo.get(tipo, "")
             print(f"\n=== {tipo}: {len(do_tipo)} combinação(ões) ===")
@@ -202,30 +201,27 @@ def popular(model="claude-haiku-4-5-20251001", tamanho_lote=25):
 
                 with conn.cursor() as cur:
                     for (t, area, s1, s2, s3, s4), resultado in zip(lote, resultados):
-                        dep = cat = sub = None
+                        categoria_id = None
                         if resultado:
                             dep = resultado.get("departamento")
                             cat = resultado.get("categoria")
                             sub = resultado.get("subcategoria")
-                            if (t, dep, cat, sub) not in combinacoes_validas:
-                                if dep or cat or sub:
-                                    zeradas += 1
-                                dep = cat = sub = None
+                            categoria_id = categorias.resolver_id(t, dep, cat, sub)
+                            if (dep or cat or sub) and not categoria_id:
+                                zeradas += 1
                         cur.execute(
                             """
                             INSERT INTO mapeamento_categoria_iqvia
-                                (tipo_cadastro, area_farmacia, sub_cat1, sub_cat2, sub_cat3, sub_cat4,
-                                 departamento, categoria, subcategoria)
-                            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                            ON CONFLICT (tipo_cadastro, coalesce(area_farmacia, ''), coalesce(sub_cat1, ''),
+                                (tipo_produto, area_farmacia, sub_cat1, sub_cat2, sub_cat3, sub_cat4,
+                                 categoria_id)
+                            VALUES (%s, %s, %s, %s, %s, %s, %s)
+                            ON CONFLICT (tipo_produto, coalesce(area_farmacia, ''), coalesce(sub_cat1, ''),
                                          coalesce(sub_cat2, ''), coalesce(sub_cat3, ''), coalesce(sub_cat4, ''))
-                            DO UPDATE SET departamento = EXCLUDED.departamento,
-                                          categoria = EXCLUDED.categoria,
-                                          subcategoria = EXCLUDED.subcategoria,
+                            DO UPDATE SET categoria_id = EXCLUDED.categoria_id,
                                           revisado_humanamente = false,
                                           atualizado_em = now()
                             """,
-                            (t, area, s1, s2, s3, s4, dep, cat, sub),
+                            (t, area, s1, s2, s3, s4, categoria_id),
                         )
                         gravadas += 1
                 conn.commit()

@@ -50,15 +50,14 @@ SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS mapeamento_categoria_cmed (
     id                    BIGSERIAL PRIMARY KEY,
     categoria_bruta       TEXT NOT NULL,
-    departamento          TEXT,
-    categoria             TEXT,
-    subcategoria          TEXT,
+    categoria_id          BIGINT REFERENCES categorias(id),
     revisado_humanamente  BOOLEAN NOT NULL DEFAULT false,
     criado_em             TIMESTAMPTZ NOT NULL DEFAULT now(),
     atualizado_em         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS mapeamento_categoria_cmed_chave ON mapeamento_categoria_cmed (categoria_bruta);
 """
+
 
 CLASSIFICACAO_SYSTEM = """Você classifica CLASSES TERAPÊUTICAS de medicamento na árvore oficial abaixo. \
 Cada item da lista é uma classe terapêutica inteira da base oficial da ANVISA/CMED (ex: "N3A - \
@@ -162,8 +161,8 @@ def popular(model="claude-haiku-4-5-20251001", tamanho_lote=25):
     if not api_key or "COLOQUE_SUA_KEY_AQUI" in api_key:
         sys.exit("Erro: defina uma API key válida da Anthropic (.env na raiz do projeto).")
 
-    combinacoes_validas, arvores_por_ramo = categorias.carregar_arvore()
-    arvore_medicamento = arvores_por_ramo.get("Medicamento", "")
+    _combinacoes_validas, arvores_por_ramo = categorias.carregar_arvore()
+    arvore_medicamento = arvores_por_ramo.get("medicamento", "")
     if not arvore_medicamento:
         sys.exit("Erro: tabela categorias vazia ou sem ramo Medicamento - rode carregar_categorias.py antes.")
 
@@ -181,28 +180,25 @@ def popular(model="claude-haiku-4-5-20251001", tamanho_lote=25):
 
             with conn.cursor() as cur:
                 for bruta, resultado in zip(lote, resultados):
-                    dep = cat = sub = None
+                    categoria_id = None
                     if resultado:
                         dep = resultado.get("departamento")
                         cat = resultado.get("categoria")
                         sub = resultado.get("subcategoria")
-                        if ("Medicamento", dep, cat, sub) not in combinacoes_validas:
-                            if dep or cat or sub:
-                                zeradas += 1
-                            dep = cat = sub = None
+                        categoria_id = categorias.resolver_id("medicamento", dep, cat, sub)
+                        if (dep or cat or sub) and not categoria_id:
+                            zeradas += 1
                     cur.execute(
                         """
                         INSERT INTO mapeamento_categoria_cmed
-                            (categoria_bruta, departamento, categoria, subcategoria)
-                        VALUES (%s, %s, %s, %s)
+                            (categoria_bruta, categoria_id)
+                        VALUES (%s, %s)
                         ON CONFLICT (categoria_bruta)
-                        DO UPDATE SET departamento = EXCLUDED.departamento,
-                                      categoria = EXCLUDED.categoria,
-                                      subcategoria = EXCLUDED.subcategoria,
+                        DO UPDATE SET categoria_id = EXCLUDED.categoria_id,
                                       revisado_humanamente = false,
                                       atualizado_em = now()
                         """,
-                        (bruta, dep, cat, sub),
+                        (bruta, categoria_id),
                     )
                     gravadas += 1
             conn.commit()

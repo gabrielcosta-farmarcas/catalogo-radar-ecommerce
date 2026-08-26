@@ -13,7 +13,7 @@ from swagger_ui_bundle import swagger_ui_path
 
 from app.config import settings
 from app.errors import AppError
-from app.routers import categorias, enriquecimento, fontes, health, produtos
+from app.routers import categorias, dominios, enriquecimento, fontes, health, produtos
 from app.schemas.common import ErroResposta
 
 logger = logging.getLogger(__name__)
@@ -70,6 +70,7 @@ def create_app() -> FastAPI:
             {"name": "enriquecimento", "description": "Roda o pipeline (CMED → ABCFarma → IQVIA → crawler → Claude)."},
             {"name": "fontes", "description": "Consulta rápida às bases oficiais, sem Claude."},
             {"name": "categorias", "description": "Árvore oficial para filtros e formulários."},
+            {"name": "dominios", "description": "Vocabulário fechado (tipo de produto, tarja)."},
         ],
         docs_url=None,
         redoc_url=None,
@@ -112,6 +113,7 @@ def create_app() -> FastAPI:
     app.include_router(enriquecimento.router, prefix=prefix)
     app.include_router(fontes.router, prefix=prefix)
     app.include_router(categorias.router, prefix=prefix)
+    app.include_router(dominios.router, prefix=prefix)
 
     app.mount(
         "/swagger-static",

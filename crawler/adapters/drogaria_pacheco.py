@@ -9,7 +9,7 @@ def _first(lst):
 def _mapear_generico(tipo_medicamento):
     if not tipo_medicamento:
         return None
-    return "Sim" if "gener" in tipo_medicamento.strip().lower().replace("é", "e") else "Não"
+    return True if "gener" in tipo_medicamento.strip().lower().replace("é", "e") else False
 
 
 class DrogariaPachecoAdapter(SiteAdapter):

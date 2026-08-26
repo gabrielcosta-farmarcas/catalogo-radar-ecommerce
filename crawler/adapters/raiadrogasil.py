@@ -3,6 +3,7 @@ import re
 
 from ..base import SiteAdapter, html_to_text, ean_igual
 from ..models import ProductResult
+from dominios import parse_tarja
 
 def _extract_next_data(html):
     match = re.search(r'<script\s+id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.DOTALL)
@@ -13,19 +14,10 @@ def _mapear_tarja(descricaotarja):
     """
     Drogasil/Droga Raia nao tem um campo "Tarja Vermelha/Preta" literal - so
     um texto livre em 'descricaotarja' (ex: "TARJADO EM VERMELHO COM
-    RETENCAO DA RECEITA"). Mapeia pro nosso vocabulario fechado; None se nao
-    conseguir reconhecer o padrao (mais seguro que arriscar errado).
+    RETENCAO DA RECEITA"). Mapeia pro código persistido; None se nao
+    reconhecer o padrao.
     """
-    if not descricaotarja:
-        return None
-    texto = descricaotarja.upper()
-    if "PRETO" in texto or "PRETA" in texto:
-        return "Tarja Preta"
-    if "VERMELH" in texto:
-        return "Tarja Vermelha"
-    if "SEM TARJA" in texto or "ISENTO" in texto or "LIVRE" in texto:
-        return "Sem Tarja"
-    return None
+    return parse_tarja(descricaotarja)
 
 
 class RaiaDrogasilBase(SiteAdapter):

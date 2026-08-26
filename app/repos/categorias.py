@@ -11,8 +11,9 @@ def listar_linhas() -> list[tuple]:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT tipo_produto, departamento, categoria, subcategoria
+                    SELECT id, tipo_produto, departamento, categoria, subcategoria
                     FROM categorias
+                    WHERE COALESCE(ativo, true) = true
                     ORDER BY tipo_produto, departamento, categoria, subcategoria
                     """
                 )

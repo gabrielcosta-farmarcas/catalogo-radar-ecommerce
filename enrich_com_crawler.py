@@ -66,6 +66,13 @@ import cmed
 import iqvia
 import substancias_controladas
 import enrich_produtos as ep
+from dominios import (
+    TARJA_PRETA,
+    TARJA_SEM,
+    TARJA_VERMELHA,
+    TIPO_MEDICAMENTO,
+    TIPO_NAO_MEDICAMENTO,
+)
 
 CLIENT = None
 MODELO_PADRAO = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
@@ -344,7 +351,7 @@ def mapear_para_schema(resultado, fontes, client, model):
     descrição comercial passam por UMA chamada de texto puro (sem busca)
     usando só os fatos já confirmados pelo crawler. Retorna (data, usage).
     """
-    tipo_cadastro = "Medicamento" if _indica_medicamento(resultado) else "Não Medicamento"
+    tipo_cadastro = TIPO_MEDICAMENTO if _indica_medicamento(resultado) else TIPO_NAO_MEDICAMENTO
     # description (texto completo do produto) tem informação real de verdade;
     # short_description costuma ser só meta-tag de SEO/propaganda ("Compre...
     # Entrega Rápida... Aproveite!"), que é 100% removida pela regra "sem
@@ -369,7 +376,7 @@ def mapear_para_schema(resultado, fontes, client, model):
         "titulo": formatados.get("titulo") or resultado.get("name"),
         "marca": resultado.get("brand"),
         "fabricante": resultado.get("manufacturer") or resultado.get("brand"),
-        "tipo_cadastro": tipo_cadastro,
+        "tipo_produto": tipo_cadastro,
         "registro_ms": resultado.get("ms_register"),
         "generico": resultado.get("generico"),
         "tarja": resultado.get("tarja"),
@@ -379,16 +386,17 @@ def mapear_para_schema(resultado, fontes, client, model):
         "departamento": formatados.get("departamento"),
         "categoria": formatados.get("categoria"),
         "subcategoria": formatados.get("subcategoria"),
+        "categoria_id": None,
         "origem_categorizacao": "ia",  # crawler não tem de-para ainda
-        "imagem_url": None if tipo_cadastro == "Medicamento" else resultado.get("image1"),
+        "imagem_url": None if tipo_cadastro == TIPO_MEDICAMENTO else resultado.get("image1"),
         "pagina_produto_url": resultado.get("url"),
         # mesmo quando o crawler acha o produto, título/categoria/descrição
         # ainda passam por uma chamada ao Claude (sem busca) - o rótulo deixa
         # isso explícito, em vez de sugerir que nenhum token de LLM foi gasto
         "origem_enriquecimento": f"crawler+claude ({','.join(fontes)})",
-        "confirmado_anvisa_cmed": "Não",
+        "confirmado_anvisa_cmed": False,
         "tarja_confirmada_bulario": (
-            "Sim" if resultado.get("_tarja_fonte") == "sara" else "Não"
+            True if resultado.get("_tarja_fonte") == "sara" else False
         ),
     }
 
@@ -396,7 +404,7 @@ def mapear_para_schema(resultado, fontes, client, model):
     # categoria/subcategoria se a combinação não existir na árvore oficial -
     # rede de segurança contra a classificação acima ter errado
     data = ep.apply_safety_checks(data, resultado.get("ean"))
-    data["model"] = model
+    data["modelo"] = model
     return ep.marcar_validacao_humana(data), usage
 
 
@@ -436,15 +444,14 @@ def _resolver_tarja_e_retencao_cmed(tarja_bruta, principios_ativos):
     Retorna (tarja, precisa_retencao_receita).
     """
     tarja_normalizada = cmed.TARJA_CMED_PARA_SCHEMA.get(tarja_bruta)
-    if tarja_normalizada == "Tarja Preta":
-        return "Tarja Preta", "Sim"
-    if tarja_normalizada == "Sem Tarja":
-        return "Sem Tarja", "Não"
+    if tarja_normalizada == TARJA_PRETA:
+        return TARJA_PRETA, True
+    if tarja_normalizada == TARJA_SEM:
+        return TARJA_SEM, False
     if tarja_normalizada is None:
         return None, None
-    # só sobra "Tarja Vermelha" (a normalização da CMED não tem outro valor)
     achou = substancias_controladas.substancia_esta_controlada(principios_ativos)
-    return "Tarja Vermelha", ("Sim" if achou else "Não")
+    return TARJA_VERMELHA, achou
 
 
 def mapear_cmed_para_schema(medicamento, ean, client, model):
@@ -536,7 +543,7 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
     formatados, usage_fmt = ep.formatar_campos_confirmados(
         client,
         model,
-        "Medicamento",
+        TIPO_MEDICAMENTO,
         marca,
         principios_ativos,
         apresentacao,
@@ -553,9 +560,9 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
         "titulo": formatados.get("titulo") or produto.title(),
         "marca": marca,
         "fabricante": medicamento["laboratorio"],
-        "tipo_cadastro": "Medicamento",
+        "tipo_produto": TIPO_MEDICAMENTO,
         "registro_ms": medicamento["registro"],
-        "generico": "Sim" if medicamento["tipo_produto"] == "Genérico" else "Não",
+        "generico": medicamento["tipo_produto"] == "Genérico",
         "tarja": tarja_final,
         "precisa_retencao_receita": retencao_final,
         "principios_ativos": principios_ativos,
@@ -564,19 +571,20 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
         "departamento": categoria_mapeada["departamento"] if categoria_mapeada else formatados.get("departamento"),
         "categoria": categoria_mapeada["categoria"] if categoria_mapeada else formatados.get("categoria"),
         "subcategoria": categoria_mapeada["subcategoria"] if categoria_mapeada else formatados.get("subcategoria"),
+        "categoria_id": categoria_mapeada["categoria_id"] if categoria_mapeada else None,
         "origem_categorizacao": "mapeamento_cmed" if categoria_mapeada else "ia",
         # medicamento nunca leva imagem (apply_safety_checks reforça).
         "imagem_url": None,
         "pagina_produto_url": None,
         "origem_enriquecimento": f"{cmed.ORIGEM_ANVISA_CMED} (GGREM {medicamento['codigo_ggrem']})",
-        "confirmado_anvisa_cmed": "Sim",
+        "confirmado_anvisa_cmed": True,
     }
 
     # validar_categorizacao (dentro de apply_safety_checks) zera departamento/
     # categoria/subcategoria se a combinação não existir na árvore oficial -
     # rede de segurança contra a classificação acima ter errado
     data = ep.apply_safety_checks(data, ean)
-    data["model"] = model
+    data["modelo"] = model
     return ep.marcar_validacao_humana(data), usage
 
 
@@ -640,13 +648,13 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
     tarja_crawler = resultado_crawler.get("tarja")
     pagina_produto_url = resultado_crawler.get("url") if tarja_crawler else None
     tarja_confirmada_bulario = (
-        "Sim" if resultado_crawler.get("_tarja_fonte") == "sara" else "Não"
+        True if resultado_crawler.get("_tarja_fonte") == "sara" else False
     )
 
     formatados, usage_fmt = ep.formatar_campos_confirmados(
         client,
         model,
-        "Medicamento",
+        TIPO_MEDICAMENTO,
         marca,
         principios_ativos,
         apresentacao,
@@ -663,9 +671,9 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
         "titulo": formatados.get("titulo") or descricao_produto.title(),
         "marca": marca,
         "fabricante": medicamento["laboratorio"],
-        "tipo_cadastro": "Medicamento",
+        "tipo_produto": TIPO_MEDICAMENTO,
         "registro_ms": medicamento["registro_anvisa"],
-        "generico": "Sim" if medicamento["tipo_medicamento"] == "GENERICO" else "Não",
+        "generico": medicamento["tipo_medicamento"] == "GENERICO",
         "tarja": tarja_crawler,
         "principios_ativos": principios_ativos,
         "descricao_curta": formatados.get("descricao_curta"),
@@ -673,6 +681,7 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
         "departamento": formatados.get("departamento"),
         "categoria": formatados.get("categoria"),
         "subcategoria": formatados.get("subcategoria"),
+        "categoria_id": None,
         "origem_categorizacao": "ia",  # ABCFarma não tem de-para ainda
         # medicamento nunca leva imagem (apply_safety_checks reforça).
         "imagem_url": None,
@@ -680,7 +689,7 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
         "origem_enriquecimento": (
             f"{abcfarma.ORIGEM_ABCFARMA} (produto {medicamento['codigo_produto']})"
         ),
-        "confirmado_anvisa_cmed": "Não",
+        "confirmado_anvisa_cmed": False,
         "tarja_confirmada_bulario": tarja_confirmada_bulario,
     }
 
@@ -690,7 +699,7 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
     # tarja_crawler veio com tarja fora do vocabulário fechado, também é
     # zerada aqui (ALLOWED_TARJA).
     data = ep.apply_safety_checks(data, ean)
-    data["model"] = model
+    data["modelo"] = model
 
     # tarja ainda não confirmada (nem CMED, nem ABCFarma, nem crawler) -
     # última tentativa via busca dedicada na internet, mesma função e mesmo
@@ -755,7 +764,7 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
     """
     setor = produto["setor_nec_aberto"]
     eh_medicamento = iqvia.eh_medicamento(setor)
-    tipo_cadastro = "Medicamento" if eh_medicamento else "Não Medicamento"
+    tipo_cadastro = TIPO_MEDICAMENTO if eh_medicamento else TIPO_NAO_MEDICAMENTO
     eh_generico = iqvia.eh_generico(setor)
     precisa_receita = iqvia.precisa_receita(setor)  # True=RX, False=MIP, None=não medicamento
 
@@ -777,16 +786,16 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
         )
 
     tarja = None
-    tarja_confirmada_iqvia_mip = "Não"
-    tarja_confirmada_bulario = "Não"
+    tarja_confirmada_iqvia_mip = False
+    tarja_confirmada_bulario = False
     pagina_produto_url = None
     registro_ms = None
 
     if precisa_receita is False:
         # MIP = Medicamento Isento de Prescrição - categoria regulatória
         # oficial do IQVIA, não inferência de site - confirma tarja direto
-        tarja = "Sem Tarja"
-        tarja_confirmada_iqvia_mip = "Sim"
+        tarja = TARJA_SEM
+        tarja_confirmada_iqvia_mip = True
         resultado_crawler, _fontes_crawler = buscar_no_crawler(
             ean, parar_quando=lambda _r, _f: True
         )
@@ -801,7 +810,7 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
             tarja = tarja_crawler
             pagina_produto_url = resultado_crawler.get("url")
             tarja_confirmada_bulario = (
-                "Sim" if resultado_crawler.get("_tarja_fonte") == "sara" else "Não"
+                True if resultado_crawler.get("_tarja_fonte") == "sara" else False
             )
         registro_ms = resultado_crawler.get("ms_register")
     else:
@@ -861,9 +870,9 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
         "titulo": formatados.get("titulo") or descricao_longa.title(),
         "marca": marca,
         "fabricante": fabricante,
-        "tipo_cadastro": tipo_cadastro,
+        "tipo_produto": tipo_cadastro,
         "registro_ms": registro_ms,
-        "generico": ("Sim" if eh_generico else "Não") if eh_medicamento else None,
+        "generico": eh_generico if eh_medicamento else None,
         "tarja": tarja,
         "principios_ativos": principios_ativos,
         "descricao_curta": formatados.get("descricao_curta"),
@@ -871,13 +880,14 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
         "departamento": categoria_mapeada["departamento"] if categoria_mapeada else formatados.get("departamento"),
         "categoria": categoria_mapeada["categoria"] if categoria_mapeada else formatados.get("categoria"),
         "subcategoria": categoria_mapeada["subcategoria"] if categoria_mapeada else formatados.get("subcategoria"),
+        "categoria_id": categoria_mapeada["categoria_id"] if categoria_mapeada else None,
         "origem_categorizacao": "mapeamento_iqvia" if categoria_mapeada else "ia",
         # IQVIA não tem coluna de imagem - crawler só preenche foto de
         # não-medicamento. Medicamento sai sem imagem (regra de negócio).
         "imagem_url": None if eh_medicamento else resultado_crawler.get("image1"),
         "pagina_produto_url": pagina_produto_url,
         "origem_enriquecimento": f"{iqvia.ORIGEM_IQVIA} (FCC {produto['fcc']})",
-        "confirmado_anvisa_cmed": "Não",
+        "confirmado_anvisa_cmed": False,
         "tarja_confirmada_bulario": tarja_confirmada_bulario,
         "tarja_confirmada_iqvia_mip": tarja_confirmada_iqvia_mip,
     }
@@ -886,7 +896,7 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
     # categoria/subcategoria se a combinação não existir na árvore oficial -
     # rede de segurança contra a classificação acima ter errado
     data = ep.apply_safety_checks(data, ean)
-    data["model"] = model
+    data["modelo"] = model
 
     # tarja de medicamento RX ainda não confirmada (nem IQVIA/MIP, nem
     # crawler) - última tentativa via busca dedicada, mesma função e mesmo
@@ -1004,7 +1014,7 @@ def worker(ean, nome_produto, args):
         usage_total[chave] += usage_claude[chave]
     if data is not None:
         data["origem_enriquecimento"] = "claude"
-        data["confirmado_anvisa_cmed"] = "Não"
+        data["confirmado_anvisa_cmed"] = False
         data = ep.marcar_validacao_humana(data)
     return ean, nome_produto, data, usage_total
 
@@ -1130,14 +1140,14 @@ def main():
                     else:
                         origem = "claude"
                     origem_counts[origem] += 1
-                    if data.get(ep.VALIDACAO_HUMANA_COLUMN) == "Sim":
+                    if ep.eh_verdadeiro(data.get(ep.VALIDACAO_HUMANA_COLUMN)):
                         revisao_humana += 1
 
                 tokens_por_origem[origem] += usage["tokens"]
 
                 processed += 1
                 revisao = ""
-                if data and data.get(ep.VALIDACAO_HUMANA_COLUMN) == "Sim":
+                if data and ep.eh_verdadeiro(data.get(ep.VALIDACAO_HUMANA_COLUMN)):
                     revisao = " | REVISÃO HUMANA"
                 print(f"[{processed}/{total}] EAN {ean} - {nome_produto} -> {status} "
                       f"({data.get('origem_enriquecimento') if data else '-'} | {usage['tokens']} tokens{revisao})")

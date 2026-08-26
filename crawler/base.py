@@ -10,6 +10,7 @@ from html import unescape
 import requests
 
 from .models import ProductResult
+from dominios import parse_tarja
 
 
 def normalizar_ean(valor):
@@ -28,26 +29,16 @@ def ean_igual(encontrado, pedido):
 
 
 def mapear_tarja_texto(valor):
-    """Normaliza texto livre de farmácia pro vocabulário fechado. None se
-    não reconhecer - melhor que passar 'Classificação' cru e o safety check
-    zerar depois, ou inferir tarja vermelha por precaução."""
-    if not valor:
+    """Normaliza texto livre de farmácia pro código persistido (sem_tarja,
+    vermelha, preta). None se não reconhecer."""
+    return parse_tarja(valor)
+
+
+def mapear_generico_texto(tipo_medicamento):
+    """True/False a partir de 'Tipo de Medicamento' de farmácia; None se vazio."""
+    if not tipo_medicamento:
         return None
-    texto = str(valor).strip().upper()
-    if not texto:
-        return None
-    if "PRETA" in texto or "PRETO" in texto:
-        return "Tarja Preta"
-    if "VERMELH" in texto:
-        return "Tarja Vermelha"
-    if (
-        "SEM TARJA" in texto
-        or "ISENTO" in texto
-        or "VENDA LIVRE" in texto
-        or "TARJA SEM TARJA" in texto
-    ):
-        return "Sem Tarja"
-    return None
+    return "gener" in tipo_medicamento.strip().lower().replace("é", "e")
 
 
 def html_to_text(html):

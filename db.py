@@ -42,51 +42,93 @@ def conectar():
 
 
 SCHEMA_SQL = """
+-- vocabulário fechado: códigos estáveis, nomes só na tabela de referência.
+CREATE TABLE IF NOT EXISTS tipos_produto (
+    codigo TEXT PRIMARY KEY,
+    nome   TEXT NOT NULL UNIQUE
+);
+INSERT INTO tipos_produto (codigo, nome) VALUES
+    ('medicamento', 'Medicamento'),
+    ('nao_medicamento', 'Não Medicamento')
+ON CONFLICT (codigo) DO UPDATE SET nome = EXCLUDED.nome;
+
+CREATE TABLE IF NOT EXISTS tarjas (
+    codigo TEXT PRIMARY KEY,
+    nome   TEXT NOT NULL UNIQUE
+);
+INSERT INTO tarjas (codigo, nome) VALUES
+    ('sem_tarja', 'Sem Tarja'),
+    ('vermelha', 'Tarja Vermelha'),
+    ('preta', 'Tarja Preta'),
+    ('nao_aplicavel', 'Não aplicável')
+ON CONFLICT (codigo) DO UPDATE SET nome = EXCLUDED.nome;
+
+DO $$ BEGIN
+    CREATE TYPE fase_produto AS ENUM ('pendente', 'concluido', 'nao_localizado');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    CREATE TYPE origem_categorizacao AS ENUM ('mapeamento_iqvia', 'mapeamento_cmed', 'ia');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+-- árvore oficial: produtos.categoria_id e os de-paras apontam pra categorias.id.
+-- CREATE aqui (antes de produtos) pra instalação nova não falhar na FK.
+CREATE TABLE IF NOT EXISTS categorias (
+    id            SERIAL PRIMARY KEY,
+    tipo_produto  TEXT NOT NULL REFERENCES tipos_produto(codigo),
+    departamento  TEXT NOT NULL,
+    categoria     TEXT NOT NULL,
+    subcategoria  TEXT NOT NULL,
+    ativo         BOOLEAN NOT NULL DEFAULT true
+);
+CREATE UNIQUE INDEX IF NOT EXISTS categorias_chave_natural ON categorias (
+    tipo_produto, departamento, categoria, subcategoria
+);
+
 CREATE TABLE IF NOT EXISTS produtos (
     id                      BIGSERIAL PRIMARY KEY,
-    ean                     TEXT UNIQUE NOT NULL,
+    ean                     VARCHAR(14) UNIQUE NOT NULL,
     nome_produto            TEXT NOT NULL,
 
-    -- resultado final (mesmo schema do xlsx, mesma ordem de RESULT_COLUMNS)
     titulo                  TEXT,
     marca                   TEXT,
     fabricante              TEXT,
-    tipo_cadastro           TEXT,
+    tipo_produto            TEXT REFERENCES tipos_produto(codigo),
     registro_ms             TEXT,
-    generico                TEXT,
-    tarja                   TEXT,
-    precisa_retencao_receita TEXT,
+    generico                BOOLEAN,
+    tarja                   TEXT REFERENCES tarjas(codigo),
+    precisa_retencao_receita BOOLEAN,
     principios_ativos       TEXT,
     descricao_curta         TEXT,
     frase_obrigatoria       TEXT,
-    departamento            TEXT,
-    categoria               TEXT,
-    subcategoria            TEXT,
-    origem_categorizacao    TEXT,  -- mapeamento_iqvia | mapeamento_cmed (de-para revisado) | ia (decisão da IA)
+    categoria_id            BIGINT REFERENCES categorias(id),
+    origem_categorizacao    origem_categorizacao,
     imagem_url              TEXT,
     pagina_produto_url      TEXT,
     preco_pesquisado        TEXT,
-    data_pesquisa           TEXT,
-    origem_enriquecimento   TEXT,  -- anvisa_cmed (GGREM ...) | crawler+claude (sites) | claude
-    confirmado_anvisa_cmed  TEXT,  -- Sim | Não - mesmo sentido da coluna equivalente no xlsx
-    precisa_validacao_humana TEXT,  -- Sim | Não - medicamento achado só via Claude/web
-    mensagem_validacao_humana TEXT, -- texto pra fila humana; null quando Não
+    data_pesquisa           DATE,
+    origem_enriquecimento   TEXT,
+    confirmado_anvisa_cmed  BOOLEAN NOT NULL DEFAULT false,
+    precisa_validacao_humana BOOLEAN NOT NULL DEFAULT false,
+    mensagem_validacao_humana TEXT,
 
-    -- estado geral do fluxo
-    fase_atual              TEXT NOT NULL DEFAULT 'pendente',
-    -- pendente | concluido | nao_localizado
+    fase_atual              fase_produto NOT NULL DEFAULT 'pendente',
 
-    model                   TEXT,  -- model ID da Anthropic que gerou esta versão (ex: claude-haiku-4-5-20251001)
+    modelo                  TEXT,
     tokens_utilizados       INTEGER NOT NULL DEFAULT 0,
     tokens_cache_gravados   INTEGER NOT NULL DEFAULT 0,
     tokens_cache_lidos      INTEGER NOT NULL DEFAULT 0,
 
-    -- timestamps sempre por último, por convenção
     criado_em               TIMESTAMPTZ NOT NULL DEFAULT now(),
     atualizado_em           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_produtos_fase ON produtos (fase_atual);
+CREATE INDEX IF NOT EXISTS idx_produtos_categoria_id ON produtos (categoria_id);
+CREATE INDEX IF NOT EXISTS idx_produtos_tipo_produto ON produtos (tipo_produto);
+CREATE INDEX IF NOT EXISTS idx_produtos_validacao_humana
+    ON produtos (precisa_validacao_humana) WHERE precisa_validacao_humana;
 
 -- timeline de versões de cada produto - uma linha por vez que ele foi
 -- enriquecido (inclusive a primeira), gravada pelo próprio código Python em
@@ -112,151 +154,13 @@ CREATE TABLE IF NOT EXISTS produtos_historico (
 CREATE INDEX IF NOT EXISTS idx_produtos_historico_ean ON produtos_historico (ean);
 """
 
-# pra tabelas criadas antes da integração com a CMED - SCHEMA_SQL acima só
-# cria colunas em tabela nova (CREATE TABLE IF NOT EXISTS não altera uma
-# tabela já existente). Tudo idempotente, seguro rodar de novo.
-MIGRACOES_SQL = """
-ALTER TABLE produtos ADD COLUMN IF NOT EXISTS confirmado_anvisa_cmed TEXT;
-ALTER TABLE produtos ADD COLUMN IF NOT EXISTS precisa_validacao_humana TEXT;
-ALTER TABLE produtos ADD COLUMN IF NOT EXISTS mensagem_validacao_humana TEXT;
-ALTER TABLE produtos ALTER COLUMN fase_atual SET DEFAULT 'pendente';
--- renomeia o valor antigo (nome preso a uma pré-checagem de CMED que não
--- existe mais, ver módulo verificar_cmed removido) pro nome atual
-UPDATE produtos SET fase_atual = 'pendente' WHERE fase_atual = 'aguardando_cmed';
-
--- campos usados por enrich_produtos.py/enrich_com_crawler.py que ainda não
--- estavam no schema (ver RESULT_COLUMNS em enrich_produtos.py)
-ALTER TABLE produtos ADD COLUMN IF NOT EXISTS precisa_retencao_receita TEXT;
-ALTER TABLE produtos ADD COLUMN IF NOT EXISTS preco_pesquisado TEXT;
-ALTER TABLE produtos ADD COLUMN IF NOT EXISTS data_pesquisa TEXT;
-
--- batches/batch_items eram o esqueleto de um fluxo em lote via Batch API que
--- nunca foi implementado (nenhuma função lia/gravava neles) - removidas.
-DROP TABLE IF EXISTS batch_items;
-DROP TABLE IF EXISTS batches;
-
--- id numérico como chave primária (ean fica só UNIQUE) - migração histórica,
--- já aplicada neste banco e coberta em SCHEMA_SQL pra instalação nova. Não
--- fica mais aqui como drop+recreate porque toda FK nova pra produtos(id)
--- (ex: produtos_historico) passa a depender do índice de produtos_pkey, e
--- recriá-lo a cada `criar-tabelas` quebraria essas FKs sem necessidade.
-
--- status_crawler/fontes_crawler/dados_crawler eram placeholders pra uma fase
--- de crawler que nunca foi implementada aqui (nenhuma função grava neles) -
--- removidos. O crawler real (enrich_com_crawler.py) roda fora dessa máquina
--- de fases, direto no fluxo em tempo real.
-ALTER TABLE produtos DROP COLUMN IF EXISTS status_crawler;
-ALTER TABLE produtos DROP COLUMN IF EXISTS fontes_crawler;
-ALTER TABLE produtos DROP COLUMN IF EXISTS dados_crawler;
-
--- sinaliza se departamento/categoria/subcategoria vieram de um de-para já
--- revisado por humano (mapeamento_categoria_iqvia/_cmed) ou de uma decisão
--- da IA na hora (sem de-para pra essa combinação, ou fonte sem de-para
--- ainda - ABCFarma/crawler/Claude puro)
-ALTER TABLE produtos ADD COLUMN IF NOT EXISTS origem_categorizacao TEXT;
-ALTER TABLE produtos DROP CONSTRAINT IF EXISTS produtos_origem_categorizacao_check;
-ALTER TABLE produtos ADD CONSTRAINT produtos_origem_categorizacao_check
-    CHECK (origem_categorizacao IS NULL OR origem_categorizacao IN ('mapeamento_iqvia', 'mapeamento_cmed', 'ia'));
-
--- model ID que gerou a versão atual - ajuda a explicar divergência entre
--- execuções (ex: troca de modelo entre um reprocessamento e outro). Em
--- produtos_historico, model já vem dentro de `dados` (JSONB) - ver migração
--- de colapso do snapshot mais abaixo.
-ALTER TABLE produtos ADD COLUMN IF NOT EXISTS model TEXT;
-
--- status_cmed/dados_cmed/precisa_verificar_tarja só eram gravados por
--- verificar_cmed() (pré-checagem grátis contra a CMED, nunca integrada ao
--- fluxo real) - o fluxo em tempo real já faz sua própria consulta direta à
--- CMED (mapear_cmed_para_schema) e já expõe a fonte via
--- origem_enriquecimento, então esses 3 campos e a função foram removidos.
-ALTER TABLE produtos DROP COLUMN IF EXISTS status_cmed;
-ALTER TABLE produtos DROP COLUMN IF EXISTS dados_cmed;
-ALTER TABLE produtos DROP COLUMN IF EXISTS precisa_verificar_tarja;
-
--- produtos_historico: colapsa o snapshot (fase_resultado, titulo, marca, ...,
--- tokens_*) em `dados` JSONB - ver CREATE TABLE acima. Condicional porque só
--- faz sentido rodar numa tabela ainda no formato antigo (coluna `titulo`
--- existindo); idempotente, roda de novo sem erro depois de já ter migrado.
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM information_schema.columns
-        WHERE table_name = 'produtos_historico' AND column_name = 'titulo'
-    ) THEN
-        ALTER TABLE produtos_historico ADD COLUMN IF NOT EXISTS dados JSONB;
-        UPDATE produtos_historico SET dados = jsonb_build_object(
-            'fase_resultado', fase_resultado,
-            'titulo', titulo,
-            'marca', marca,
-            'fabricante', fabricante,
-            'tipo_cadastro', tipo_cadastro,
-            'registro_ms', registro_ms,
-            'generico', generico,
-            'tarja', tarja,
-            'precisa_retencao_receita', precisa_retencao_receita,
-            'principios_ativos', principios_ativos,
-            'descricao_curta', descricao_curta,
-            'frase_obrigatoria', frase_obrigatoria,
-            'departamento', departamento,
-            'categoria', categoria,
-            'subcategoria', subcategoria,
-            'origem_categorizacao', origem_categorizacao,
-            'imagem_url', imagem_url,
-            'pagina_produto_url', pagina_produto_url,
-            'preco_pesquisado', preco_pesquisado,
-            'data_pesquisa', data_pesquisa,
-            'origem_enriquecimento', origem_enriquecimento,
-            'confirmado_anvisa_cmed', confirmado_anvisa_cmed,
-            'precisa_validacao_humana', precisa_validacao_humana,
-            'mensagem_validacao_humana', mensagem_validacao_humana,
-            'model', model,
-            'tokens_utilizados', tokens_utilizados,
-            'tokens_cache_gravados', tokens_cache_gravados,
-            'tokens_cache_lidos', tokens_cache_lidos
-        )
-        WHERE dados IS NULL;
-        ALTER TABLE produtos_historico ALTER COLUMN dados SET NOT NULL;
-
-        ALTER TABLE produtos_historico DROP COLUMN fase_resultado;
-        ALTER TABLE produtos_historico DROP COLUMN titulo;
-        ALTER TABLE produtos_historico DROP COLUMN marca;
-        ALTER TABLE produtos_historico DROP COLUMN fabricante;
-        ALTER TABLE produtos_historico DROP COLUMN tipo_cadastro;
-        ALTER TABLE produtos_historico DROP COLUMN registro_ms;
-        ALTER TABLE produtos_historico DROP COLUMN generico;
-        ALTER TABLE produtos_historico DROP COLUMN tarja;
-        ALTER TABLE produtos_historico DROP COLUMN precisa_retencao_receita;
-        ALTER TABLE produtos_historico DROP COLUMN principios_ativos;
-        ALTER TABLE produtos_historico DROP COLUMN descricao_curta;
-        ALTER TABLE produtos_historico DROP COLUMN frase_obrigatoria;
-        ALTER TABLE produtos_historico DROP COLUMN departamento;
-        ALTER TABLE produtos_historico DROP COLUMN categoria;
-        ALTER TABLE produtos_historico DROP COLUMN subcategoria;
-        ALTER TABLE produtos_historico DROP COLUMN origem_categorizacao;
-        ALTER TABLE produtos_historico DROP COLUMN imagem_url;
-        ALTER TABLE produtos_historico DROP COLUMN pagina_produto_url;
-        ALTER TABLE produtos_historico DROP COLUMN preco_pesquisado;
-        ALTER TABLE produtos_historico DROP COLUMN data_pesquisa;
-        ALTER TABLE produtos_historico DROP COLUMN origem_enriquecimento;
-        ALTER TABLE produtos_historico DROP COLUMN confirmado_anvisa_cmed;
-        ALTER TABLE produtos_historico DROP COLUMN precisa_validacao_humana;
-        ALTER TABLE produtos_historico DROP COLUMN mensagem_validacao_humana;
-        ALTER TABLE produtos_historico DROP COLUMN model;
-        ALTER TABLE produtos_historico DROP COLUMN tokens_utilizados;
-        ALTER TABLE produtos_historico DROP COLUMN tokens_cache_gravados;
-        ALTER TABLE produtos_historico DROP COLUMN tokens_cache_lidos;
-    END IF;
-END $$;
-"""
-
 
 def criar_tabelas():
     with conectar() as conn:
         with conn.cursor() as cur:
             cur.execute(SCHEMA_SQL)
-            cur.execute(MIGRACOES_SQL)
         conn.commit()
-    print("Tabelas criadas/confirmadas: produtos.")
+    print("Tabelas criadas/confirmadas: categorias, produtos, produtos_historico.")
 
 
 def carregar_eans(caminho_xlsx):

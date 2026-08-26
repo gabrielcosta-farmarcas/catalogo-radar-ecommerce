@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.db import dict_cursor, get_conn
 from app.schemas.campos import COLUNAS_RESUMO
+from dominios import normalizar_cadastro
 
 
 def upsert(conn, ean: str, nome_produto: str) -> None:
@@ -41,9 +42,19 @@ def inserir(ean: str, nome_produto: str) -> dict | None:
 def obter_por_ean(ean: str) -> dict | None:
     with get_conn() as conn:
         with dict_cursor(conn) as cur:
-            cur.execute("SELECT * FROM produtos WHERE ean = %s", (ean,))
+            cur.execute(
+                """
+                SELECT p.*, c.departamento, c.categoria, c.subcategoria
+                FROM produtos p
+                LEFT JOIN categorias c ON c.id = p.categoria_id
+                WHERE p.ean = %s
+                """,
+                (ean,),
+            )
             row = cur.fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    return normalizar_cadastro(dict(row))
 
 
 def listar_historico(ean: str) -> list[dict]:
@@ -66,7 +77,7 @@ def listar_historico(ean: str) -> list[dict]:
             linhas = []
             for row in cur.fetchall():
                 row = dict(row)
-                dados = row.pop("dados") or {}
+                dados = normalizar_cadastro(dict(row.pop("dados") or {}))
                 linhas.append({**dados, **row})
             return linhas
 
@@ -83,15 +94,15 @@ def listar(
     params: list = []
 
     if fase:
-        filtros.append("fase_atual = %s")
+        filtros.append("p.fase_atual = %s")
         params.append(fase)
     if validacao_humana is True:
-        filtros.append("precisa_validacao_humana = 'Sim'")
+        filtros.append("p.precisa_validacao_humana = true")
     elif validacao_humana is False:
-        filtros.append("(precisa_validacao_humana IS NULL OR precisa_validacao_humana <> 'Sim')")
+        filtros.append("(p.precisa_validacao_humana IS NULL OR p.precisa_validacao_humana = false)")
     if q:
         filtros.append(
-            "(ean ILIKE %s OR nome_produto ILIKE %s OR COALESCE(titulo, '') ILIKE %s)"
+            "(p.ean ILIKE %s OR p.nome_produto ILIKE %s OR COALESCE(p.titulo, '') ILIKE %s)"
         )
         like = f"%{q}%"
         params.extend([like, like, like])
@@ -101,19 +112,20 @@ def listar(
 
     with get_conn() as conn:
         with dict_cursor(conn) as cur:
-            cur.execute(f"SELECT count(*) AS total FROM produtos {where}", params)
+            cur.execute(f"SELECT count(*) AS total FROM produtos p {where}", params)
             total = cur.fetchone()["total"]
             cur.execute(
                 f"""
                 SELECT {colunas}
-                FROM produtos
+                FROM produtos p
+                LEFT JOIN categorias c ON c.id = p.categoria_id
                 {where}
-                ORDER BY atualizado_em DESC, ean
+                ORDER BY p.atualizado_em DESC, p.ean
                 LIMIT %s OFFSET %s
                 """,
                 params + [limit, offset],
             )
-            itens = [dict(row) for row in cur.fetchall()]
+            itens = [normalizar_cadastro(dict(row)) for row in cur.fetchall()]
     return total, itens
 
 
@@ -125,7 +137,7 @@ def estatisticas() -> dict:
             )
             por_fase = {row["fase_atual"]: row["qtd"] for row in cur.fetchall()}
             cur.execute(
-                "SELECT count(*) AS qtd FROM produtos WHERE precisa_validacao_humana = 'Sim'"
+                "SELECT count(*) AS qtd FROM produtos WHERE precisa_validacao_humana = true"
             )
             validacao = cur.fetchone()["qtd"]
             cur.execute("SELECT count(*) AS qtd FROM produtos")

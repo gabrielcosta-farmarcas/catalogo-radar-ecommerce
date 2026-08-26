@@ -16,6 +16,8 @@ import re
 
 import psycopg2
 
+from dominios import TARJA_PRETA, TARJA_SEM, TARJA_VERMELHA
+
 DB_CONFIG = {
     "host": os.environ.get("PG_HOST", "localhost"),
     "port": os.environ.get("PG_PORT", "5433"),
@@ -38,10 +40,10 @@ CAMPOS = (
 # segue (ver apply_safety_checks). "sob restrição" ainda é tarja vermelha
 # (venda sob prescrição, só que com controle adicional de retenção de receita).
 TARJA_CMED_PARA_SCHEMA = {
-    "Tarja Vermelha": "Tarja Vermelha",
-    "Tarja Vermelha sob restrição": "Tarja Vermelha",
-    "Tarja Preta": "Tarja Preta",
-    "Tarja Sem Tarja": "Sem Tarja",
+    "Tarja Vermelha": TARJA_VERMELHA,
+    "Tarja Vermelha sob restrição": TARJA_VERMELHA,
+    "Tarja Preta": TARJA_PRETA,
+    "Tarja Sem Tarja": TARJA_SEM,
 }
 
 # marcador de origem usado em origem_enriquecimento - apply_safety_checks usa
@@ -102,13 +104,11 @@ def buscar_medicamento_anvisa(ean):
 def buscar_categoria_mapeada(categoria_bruta):
     """
     Consulta mapeamento_categoria_cmed (ver mapear_categorias_cmed.py) por
-    uma categoria_bruta (classe_terapeutica, com sufixo de fitoterápico
-    quando aplicável) já revisada por humano. Retorna
-    {"departamento", "categoria", "subcategoria"} (valores podem ser None,
-    se a revisão confirmou que nenhuma categoria da árvore se aplica) ou
-    None se a categoria_bruta não existir na tabela ou ainda não tiver sido
-    revisada - nesse caso o chamador deve cair no fluxo normal (perguntar
-    pro Claude, como já faz hoje).
+    uma categoria_bruta já revisada por humano. Retorna
+    {"categoria_id", "departamento", "categoria", "subcategoria"} (id e
+    textos None se a revisão confirmou que nenhuma folha da árvore se
+    aplica) ou None se a categoria_bruta não existir / ainda não tiver sido
+    revisada - nesse caso o chamador cai no fluxo de IA.
     """
     if not categoria_bruta:
         return None
@@ -116,9 +116,10 @@ def buscar_categoria_mapeada(categoria_bruta):
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT departamento, categoria, subcategoria
-                FROM mapeamento_categoria_cmed
-                WHERE categoria_bruta = %s AND revisado_humanamente = true
+                SELECT m.categoria_id, c.departamento, c.categoria, c.subcategoria
+                FROM mapeamento_categoria_cmed m
+                LEFT JOIN categorias c ON c.id = m.categoria_id
+                WHERE m.categoria_bruta = %s AND m.revisado_humanamente = true
                 """,
                 (categoria_bruta,),
             )
@@ -126,4 +127,9 @@ def buscar_categoria_mapeada(categoria_bruta):
 
     if row is None:
         return None
-    return {"departamento": row[0], "categoria": row[1], "subcategoria": row[2]}
+    return {
+        "categoria_id": row[0],
+        "departamento": row[1],
+        "categoria": row[2],
+        "subcategoria": row[3],
+    }

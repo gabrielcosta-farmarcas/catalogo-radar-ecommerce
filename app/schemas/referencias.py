@@ -40,9 +40,14 @@ class FontesEan(BaseModel):
     iqvia: Optional[dict[str, Any]] = None
 
 
+class SubcategoriaNo(BaseModel):
+    id: int
+    nome: str
+
+
 class CategoriaNo(BaseModel):
     nome: str
-    subcategorias: list[str] = Field(default_factory=list)
+    subcategorias: list[SubcategoriaNo] = Field(default_factory=list)
 
 
 class DepartamentoNo(BaseModel):
@@ -52,7 +57,18 @@ class DepartamentoNo(BaseModel):
 
 class RamoCategorias(BaseModel):
     tipo_produto: str
+    nome: str
     departamentos: list[DepartamentoNo] = Field(default_factory=list)
+
+
+class DominioItem(BaseModel):
+    codigo: str
+    nome: str
+
+
+class DominiosCadastro(BaseModel):
+    tipos_produto: list[DominioItem]
+    tarjas: list[DominioItem]
 
 
 class ArvoreCategorias(BaseModel):
