@@ -31,6 +31,7 @@ from urllib.parse import urlparse
 import httpx
 import pandas as pd
 import psycopg2
+import psycopg2.extras
 from anthropic import Anthropic, APIStatusError, APIConnectionError
 from PIL import Image, UnidentifiedImageError
 
@@ -2184,18 +2185,21 @@ def registrar_versao_historico(cur, produto_id, ean, fase_resultado, data, usage
     tela. Sem acumulação em lugar nenhum: tokens_* aqui, e em produtos, são
     sempre o gasto desta chamada específica - cada linha (e o estado atual
     de produtos) é uma foto de uma versão, nunca um total histórico.
+
+    O snapshot inteiro vai pra `dados` (JSONB) - só produto_id/ean continuam
+    colunas reais, usadas pra filtrar (ver listar_historico em
+    app/repos/produtos.py). fase_resultado e tokens_* entram dentro de
+    `dados` junto com o resto, não são consultados soltos em lugar nenhum.
     """
     colunas = RESULT_COLUMNS + VALIDACAO_COLUMNS + COLUNAS_ORIGEM
-    valores = [data.get(col) for col in colunas]
+    dados = {col: data.get(col) for col in colunas}
+    dados["fase_resultado"] = fase_resultado
+    dados["tokens_utilizados"] = usage["tokens"]
+    dados["tokens_cache_gravados"] = usage["cache_creation"]
+    dados["tokens_cache_lidos"] = usage["cache_read"]
     cur.execute(
-        f"""
-        INSERT INTO produtos_historico
-            (produto_id, ean, fase_resultado, {', '.join(colunas)},
-             tokens_utilizados, tokens_cache_gravados, tokens_cache_lidos)
-        VALUES (%s, %s, %s, {', '.join(['%s'] * len(colunas))}, %s, %s, %s)
-        """,
-        [produto_id, ean, fase_resultado] + valores
-        + [usage["tokens"], usage["cache_creation"], usage["cache_read"]],
+        "INSERT INTO produtos_historico (produto_id, ean, dados) VALUES (%s, %s, %s)",
+        [produto_id, ean, psycopg2.extras.Json(dados)],
     )
 
 

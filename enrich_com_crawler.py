@@ -121,7 +121,7 @@ def enriquecer_ean(
     return worker(str(ean).strip(), nome, args)
 
 # mesma ordem de prioridade do scraper.consolidate - sites mais confiáveis/
-# completos primeiro (ultrafarma fica de fora, não busca por EAN). sara vem
+# completos primeiro. sara vem
 # primeiro de todos: não é farmácia (sem preço/venda), é um portal de
 # bulário - os campos regulatórios que ele preenche (registro_ms, tarja,
 # active_ingredient) vêm direto do bulário oficial, mais confiáveis que o
@@ -141,7 +141,7 @@ ADAPTERS_EM_ORDEM = [
 
 # campos que, se vierem de pelo menos um site, indicam um match confiável o
 # bastante pra não precisar do Claude - sem eles (ex: só nome + imagem, caso
-# de araujo/ultrafarma) não dá pra confiar no produto certo foi encontrado
+# de araujo) não dá pra confiar no produto certo foi encontrado
 CAMPOS_CONFIANCA = ("ms_register", "active_ingredient")
 
 # "ms_register" às vezes vem preenchido com um texto de placeholder em vez

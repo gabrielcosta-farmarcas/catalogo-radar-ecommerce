@@ -47,17 +47,28 @@ def obter_por_ean(ean: str) -> dict | None:
 
 
 def listar_historico(ean: str) -> list[dict]:
+    """
+    O snapshot de cada versão vive em `dados` (JSONB) - desempacota aqui pra
+    devolver o mesmo formato achatado de antes (fase_resultado, titulo,
+    marca, ... soltos), sem precisar mudar o schema Pydantic ProdutoHistorico.
+    """
     with get_conn() as conn:
         with dict_cursor(conn) as cur:
             cur.execute(
                 """
-                SELECT * FROM produtos_historico
+                SELECT id, produto_id, ean, dados, versionado_em
+                FROM produtos_historico
                 WHERE ean = %s
                 ORDER BY versionado_em DESC, id DESC
                 """,
                 (ean,),
             )
-            return [dict(row) for row in cur.fetchall()]
+            linhas = []
+            for row in cur.fetchall():
+                row = dict(row)
+                dados = row.pop("dados") or {}
+                linhas.append({**dados, **row})
+            return linhas
 
 
 def listar(

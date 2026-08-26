@@ -7,6 +7,7 @@
 3. [ ] Na planilha `mapeamento_categoria_iqvia`, trocar os itens marcados de amarelo para verde — amarelo está errado, verde é o que está correto conforme a validação da área.
 4. [ ] Considerar apenas os produtos com `validacao_humana = true`.
 5. [ ] Criar uma base de medicamentos tarjados e consultá-la antes da tabela da IQVIA.
+6. [x] Colapsar o snapshot de `produtos_historico` (titulo, marca, categoria, tokens_*, etc.) num único campo `dados` (JSONB), mantendo `produto_id`/`ean`/`versionado_em` como colunas reais — evita `ALTER TABLE` a cada campo novo do enriquecimento, já que a tabela só é lida por completo (nunca filtrada por campo individual). `produto_id` já é FK real pra `produtos(id)`.
 
 
 
@@ -23,7 +24,7 @@ Dado um EAN pendente de cadastro, o pipeline (`enrich_com_crawler.py`) tenta pre
 1. **CMED** (`carregar_cmed.py` / `cmed.py`) — base oficial ANVISA/CMED. Se o EAN está lá, é medicamento com certeza, tarja incluída.
 2. **ABCFarma** (`carregar_abcfarma.py` / `abcfarma.py`) — segunda fonte oficial; confirma medicamento mas não a tarja.
 3. **IQVIA** (`carregar_iqvia.py` / `iqvia.py`) — catálogo de parceiro, cobre também não-medicamento (cosmético, alimento etc.) e distingue RX de MIP.
-4. **Crawler** (`crawler/`) — raspa sites de farmácias concorrentes (Araujo, Drogal, Drogaria Pacheco, Drogaria SP, Panvel, Raia/Drogasil, Sara/bulário, Ultrafarma, Venancio, VTEX) por EAN, sem custo.
+4. **Crawler** (`crawler/`) — raspa sites de farmácias concorrentes (Araujo, Drogal, Drogaria Pacheco, Drogaria SP, Panvel, Raia/Drogasil, Sara/bulário, Venancio) por EAN, sem custo.
 5. **Claude** (`enrich_produtos.py`) — busca agentic completa (web search/fetch) via API Anthropic, usada só quando as camadas acima não resolvem.
 
 Cada produto grava sua `origem_enriquecimento` e, quando o dado não vem de fonte oficial suficientemente confiável (ex.: medicamento confirmado só via Claude, ou tarja não confirmada por bulário), é marcado com `precisa_validacao_humana=Sim` para revisão antes de ir ao e-commerce.

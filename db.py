@@ -94,42 +94,20 @@ CREATE INDEX IF NOT EXISTS idx_produtos_fase ON produtos (fase_atual);
 -- manter regra de negócio na aplicação, não no banco). Tabela sozinha já é
 -- a timeline completa pra tela de acompanhamento - não precisa combinar com
 -- o estado atual de produtos.
+--
+-- Snapshot inteiro (fase_resultado, titulo, marca, ..., tokens_*) fica em
+-- `dados` (JSONB) em vez de uma coluna por campo - listar_historico
+-- (app/repos/produtos.py) sempre lê a linha inteira por EAN, nunca filtra
+-- por campo individual do snapshot, então um campo novo no enriquecimento
+-- não exige ALTER TABLE aqui (só em produtos, que é consultada por campo).
+-- produto_id/ean continuam colunas reais (referência) e versionado_em
+-- também (ordenação/timestamp da linha).
 CREATE TABLE IF NOT EXISTS produtos_historico (
-    id                        BIGSERIAL PRIMARY KEY,
-    produto_id                BIGINT NOT NULL REFERENCES produtos(id),
-    ean                       TEXT NOT NULL,
-    fase_resultado            TEXT NOT NULL,  -- concluido | nao_localizado - resultado desta versão
-
-    titulo                    TEXT,
-    marca                     TEXT,
-    fabricante                TEXT,
-    tipo_cadastro             TEXT,
-    registro_ms               TEXT,
-    generico                  TEXT,
-    tarja                     TEXT,
-    precisa_retencao_receita  TEXT,
-    principios_ativos         TEXT,
-    descricao_curta           TEXT,
-    frase_obrigatoria         TEXT,
-    departamento              TEXT,
-    categoria                 TEXT,
-    subcategoria              TEXT,
-    origem_categorizacao      TEXT,
-    imagem_url                TEXT,
-    pagina_produto_url        TEXT,
-    preco_pesquisado          TEXT,
-    data_pesquisa             TEXT,
-    origem_enriquecimento     TEXT,
-    confirmado_anvisa_cmed    TEXT,
-    precisa_validacao_humana  TEXT,
-    mensagem_validacao_humana TEXT,
-
-    model                     TEXT,  -- model ID da Anthropic que gerou esta versão
-    tokens_utilizados         INTEGER NOT NULL DEFAULT 0,
-    tokens_cache_gravados     INTEGER NOT NULL DEFAULT 0,
-    tokens_cache_lidos        INTEGER NOT NULL DEFAULT 0,
-
-    versionado_em             TIMESTAMPTZ NOT NULL DEFAULT now()
+    id             BIGSERIAL PRIMARY KEY,
+    produto_id     BIGINT NOT NULL REFERENCES produtos(id),
+    ean            TEXT NOT NULL,
+    dados          JSONB NOT NULL,
+    versionado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_produtos_historico_ean ON produtos_historico (ean);
 """
@@ -181,9 +159,10 @@ ALTER TABLE produtos ADD CONSTRAINT produtos_origem_categorizacao_check
     CHECK (origem_categorizacao IS NULL OR origem_categorizacao IN ('mapeamento_iqvia', 'mapeamento_cmed', 'ia'));
 
 -- model ID que gerou a versão atual - ajuda a explicar divergência entre
--- execuções (ex: troca de modelo entre um reprocessamento e outro)
+-- execuções (ex: troca de modelo entre um reprocessamento e outro). Em
+-- produtos_historico, model já vem dentro de `dados` (JSONB) - ver migração
+-- de colapso do snapshot mais abaixo.
 ALTER TABLE produtos ADD COLUMN IF NOT EXISTS model TEXT;
-ALTER TABLE produtos_historico ADD COLUMN IF NOT EXISTS model TEXT;
 
 -- status_cmed/dados_cmed/precisa_verificar_tarja só eram gravados por
 -- verificar_cmed() (pré-checagem grátis contra a CMED, nunca integrada ao
@@ -193,6 +172,81 @@ ALTER TABLE produtos_historico ADD COLUMN IF NOT EXISTS model TEXT;
 ALTER TABLE produtos DROP COLUMN IF EXISTS status_cmed;
 ALTER TABLE produtos DROP COLUMN IF EXISTS dados_cmed;
 ALTER TABLE produtos DROP COLUMN IF EXISTS precisa_verificar_tarja;
+
+-- produtos_historico: colapsa o snapshot (fase_resultado, titulo, marca, ...,
+-- tokens_*) em `dados` JSONB - ver CREATE TABLE acima. Condicional porque só
+-- faz sentido rodar numa tabela ainda no formato antigo (coluna `titulo`
+-- existindo); idempotente, roda de novo sem erro depois de já ter migrado.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'produtos_historico' AND column_name = 'titulo'
+    ) THEN
+        ALTER TABLE produtos_historico ADD COLUMN IF NOT EXISTS dados JSONB;
+        UPDATE produtos_historico SET dados = jsonb_build_object(
+            'fase_resultado', fase_resultado,
+            'titulo', titulo,
+            'marca', marca,
+            'fabricante', fabricante,
+            'tipo_cadastro', tipo_cadastro,
+            'registro_ms', registro_ms,
+            'generico', generico,
+            'tarja', tarja,
+            'precisa_retencao_receita', precisa_retencao_receita,
+            'principios_ativos', principios_ativos,
+            'descricao_curta', descricao_curta,
+            'frase_obrigatoria', frase_obrigatoria,
+            'departamento', departamento,
+            'categoria', categoria,
+            'subcategoria', subcategoria,
+            'origem_categorizacao', origem_categorizacao,
+            'imagem_url', imagem_url,
+            'pagina_produto_url', pagina_produto_url,
+            'preco_pesquisado', preco_pesquisado,
+            'data_pesquisa', data_pesquisa,
+            'origem_enriquecimento', origem_enriquecimento,
+            'confirmado_anvisa_cmed', confirmado_anvisa_cmed,
+            'precisa_validacao_humana', precisa_validacao_humana,
+            'mensagem_validacao_humana', mensagem_validacao_humana,
+            'model', model,
+            'tokens_utilizados', tokens_utilizados,
+            'tokens_cache_gravados', tokens_cache_gravados,
+            'tokens_cache_lidos', tokens_cache_lidos
+        )
+        WHERE dados IS NULL;
+        ALTER TABLE produtos_historico ALTER COLUMN dados SET NOT NULL;
+
+        ALTER TABLE produtos_historico DROP COLUMN fase_resultado;
+        ALTER TABLE produtos_historico DROP COLUMN titulo;
+        ALTER TABLE produtos_historico DROP COLUMN marca;
+        ALTER TABLE produtos_historico DROP COLUMN fabricante;
+        ALTER TABLE produtos_historico DROP COLUMN tipo_cadastro;
+        ALTER TABLE produtos_historico DROP COLUMN registro_ms;
+        ALTER TABLE produtos_historico DROP COLUMN generico;
+        ALTER TABLE produtos_historico DROP COLUMN tarja;
+        ALTER TABLE produtos_historico DROP COLUMN precisa_retencao_receita;
+        ALTER TABLE produtos_historico DROP COLUMN principios_ativos;
+        ALTER TABLE produtos_historico DROP COLUMN descricao_curta;
+        ALTER TABLE produtos_historico DROP COLUMN frase_obrigatoria;
+        ALTER TABLE produtos_historico DROP COLUMN departamento;
+        ALTER TABLE produtos_historico DROP COLUMN categoria;
+        ALTER TABLE produtos_historico DROP COLUMN subcategoria;
+        ALTER TABLE produtos_historico DROP COLUMN origem_categorizacao;
+        ALTER TABLE produtos_historico DROP COLUMN imagem_url;
+        ALTER TABLE produtos_historico DROP COLUMN pagina_produto_url;
+        ALTER TABLE produtos_historico DROP COLUMN preco_pesquisado;
+        ALTER TABLE produtos_historico DROP COLUMN data_pesquisa;
+        ALTER TABLE produtos_historico DROP COLUMN origem_enriquecimento;
+        ALTER TABLE produtos_historico DROP COLUMN confirmado_anvisa_cmed;
+        ALTER TABLE produtos_historico DROP COLUMN precisa_validacao_humana;
+        ALTER TABLE produtos_historico DROP COLUMN mensagem_validacao_humana;
+        ALTER TABLE produtos_historico DROP COLUMN model;
+        ALTER TABLE produtos_historico DROP COLUMN tokens_utilizados;
+        ALTER TABLE produtos_historico DROP COLUMN tokens_cache_gravados;
+        ALTER TABLE produtos_historico DROP COLUMN tokens_cache_lidos;
+    END IF;
+END $$;
 """
 
 
