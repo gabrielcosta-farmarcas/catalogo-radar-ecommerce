@@ -69,6 +69,7 @@ class DominioItem(BaseModel):
 class DominiosCadastro(BaseModel):
     tipos_produto: list[DominioItem]
     tarjas: list[DominioItem]
+    origens_enriquecimento: list[DominioItem]
 
 
 class ArvoreCategorias(BaseModel):

@@ -20,18 +20,18 @@ from db import conectar
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS anvisa_medicamentos (
     id                  BIGSERIAL PRIMARY KEY,
-    codigo_ggrem        TEXT UNIQUE NOT NULL,
+    ggrem               TEXT UNIQUE NOT NULL,
     substancia          TEXT NOT NULL,
     cnpj                TEXT NOT NULL,
     laboratorio         TEXT NOT NULL,
-    registro            TEXT NOT NULL,
+    registro_ms         TEXT NOT NULL,
     ean_1               TEXT,
     ean_2               TEXT,
     ean_3               TEXT,
     produto             TEXT NOT NULL,
     apresentacao        TEXT,
     classe_terapeutica  TEXT,
-    tipo_produto        TEXT,
+    tipo_medicamento    TEXT,
     tarja               TEXT,
     criado_em           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -106,13 +106,13 @@ def carregar_medicamentos(caminho_xlsx):
                 cur,
                 """
                 INSERT INTO anvisa_medicamentos (
-                    codigo_ggrem, substancia, cnpj, laboratorio, registro,
+                    ggrem, substancia, cnpj, laboratorio, registro_ms,
                     ean_1, ean_2, ean_3, produto, apresentacao,
-                    classe_terapeutica, tipo_produto, tarja
+                    classe_terapeutica, tipo_medicamento, tarja
                 )
                 VALUES %s
-                ON CONFLICT (codigo_ggrem) DO NOTHING
-                RETURNING codigo_ggrem
+                ON CONFLICT (ggrem) DO NOTHING
+                RETURNING ggrem
                 """,
                 tuplas,
                 fetch=True,

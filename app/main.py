@@ -70,7 +70,7 @@ def create_app() -> FastAPI:
             {"name": "enriquecimento", "description": "Roda o pipeline (CMED → ABCFarma → IQVIA → crawler → Claude)."},
             {"name": "fontes", "description": "Consulta rápida às bases oficiais, sem Claude."},
             {"name": "categorias", "description": "Árvore oficial para filtros e formulários."},
-            {"name": "dominios", "description": "Vocabulário fechado (tipo de produto, tarja)."},
+            {"name": "dominios", "description": "Vocabulário fechado (tipo de produto, tarja, origem)."},
         ],
         docs_url=None,
         redoc_url=None,

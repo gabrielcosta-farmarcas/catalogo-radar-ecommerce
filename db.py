@@ -63,6 +63,18 @@ INSERT INTO tarjas (codigo, nome) VALUES
     ('nao_aplicavel', 'Não aplicável')
 ON CONFLICT (codigo) DO UPDATE SET nome = EXCLUDED.nome;
 
+CREATE TABLE IF NOT EXISTS origens_enriquecimento (
+    codigo TEXT PRIMARY KEY,
+    nome   TEXT NOT NULL UNIQUE
+);
+INSERT INTO origens_enriquecimento (codigo, nome) VALUES
+    ('anvisa_cmed', 'ANVISA/CMED'),
+    ('abcfarma', 'ABCFarma'),
+    ('iqvia', 'IQVIA'),
+    ('crawler', 'Crawler'),
+    ('claude', 'Claude')
+ON CONFLICT (codigo) DO UPDATE SET nome = EXCLUDED.nome;
+
 DO $$ BEGIN
     CREATE TYPE fase_produto AS ENUM ('pendente', 'concluido', 'nao_localizado');
 EXCEPTION WHEN duplicate_object THEN NULL;
@@ -88,7 +100,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS categorias_chave_natural ON categorias (
 
 CREATE TABLE IF NOT EXISTS produtos (
     id                      BIGSERIAL PRIMARY KEY,
-    ean                     VARCHAR(14) UNIQUE NOT NULL,
+    ean                     TEXT UNIQUE NOT NULL,
     nome_produto            TEXT NOT NULL,
 
     titulo                  TEXT,
@@ -108,7 +120,8 @@ CREATE TABLE IF NOT EXISTS produtos (
     pagina_produto_url      TEXT,
     preco_pesquisado        TEXT,
     data_pesquisa           DATE,
-    origem_enriquecimento   TEXT,
+    origem_enriquecimento   TEXT REFERENCES origens_enriquecimento(codigo),
+    origem_referencia       TEXT,
     confirmado_anvisa_cmed  BOOLEAN NOT NULL DEFAULT false,
     precisa_validacao_humana BOOLEAN NOT NULL DEFAULT false,
     mensagem_validacao_humana TEXT,

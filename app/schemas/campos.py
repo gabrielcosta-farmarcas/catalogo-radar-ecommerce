@@ -12,6 +12,7 @@ COLUNAS_RESUMO = (
     "p.tarja",
     "p.fase_atual",
     "p.origem_enriquecimento",
+    "p.origem_referencia",
     "p.precisa_validacao_humana",
     "p.categoria_id",
     "c.departamento",

@@ -2,7 +2,7 @@
 
 ## Backlog
 
-1. [ ] Mapear as tabelas do banco (`produtos`, `anvisa_medicamentos`, `abcfarma_medicamentos`, `iqvia_produtos`, `categorias`, entre outras usadas em `db.py` / `app/db.py`) e entender onde dá pra usar FK entre elas e o que precisa ser padronizado antes disso.
+1. [x] Mapear as tabelas do banco (`produtos`, `anvisa_medicamentos`, `abcfarma_medicamentos`, `iqvia_produtos`, `categorias`, entre outras usadas em `db.py` / `app/db.py`) e entender onde dá pra usar FK entre elas e o que precisa ser padronizado antes disso.
 2. [ ] Atualizar a tabela de categorias, adicionando 3 novas categorias na tabela de referência.
 3. [ ] Na planilha `mapeamento_categoria_iqvia`, trocar os itens marcados de amarelo para verde — amarelo está errado, verde é o que está correto conforme a validação da área.
 4. [ ] Considerar apenas os produtos com `validacao_humana = true`.

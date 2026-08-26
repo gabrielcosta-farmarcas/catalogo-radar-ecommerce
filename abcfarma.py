@@ -16,6 +16,7 @@ import sys
 import psycopg2
 
 from cmed import normalizar_ean
+from dominios import ORIGEM_ABCFARMA
 
 DB_CONFIG = {
     "host": os.environ.get("PG_HOST", "localhost"),
@@ -27,14 +28,9 @@ DB_CONFIG = {
 
 CAMPOS = (
     "codigo_produto", "ean", "descricao_produto", "apresentacao",
-    "laboratorio", "registro_anvisa", "tipo_medicamento", "principio_ativo",
+    "laboratorio", "registro_ms", "tipo_medicamento", "principio_ativo",
     "produto_referencia", "ggrem",
 )
-
-# marcador de origem usado em origem_enriquecimento - mesmo padrão de
-# cmed.ORIGEM_ANVISA_CMED, duplicado aqui de propósito pra não criar
-# dependência circular entre os dois módulos de fonte oficial
-ORIGEM_ABCFARMA = "abcfarma"
 
 
 def conectar():
@@ -61,7 +57,7 @@ def buscar_medicamento_abcfarma(ean):
 
     O EAN não é chave única nessa base (a mesma ABCFarma repete o mesmo EAN
     em códigos de produto diferentes, ex: reformulação/atualização de
-    cadastro) - prioriza a linha com registro_anvisa preenchido, que é o
+    cadastro) - prioriza a linha com registro_ms preenchido, que é o
     dado mais útil pro resto do fluxo.
     """
     global _tabela_ausente_avisada
@@ -75,7 +71,7 @@ def buscar_medicamento_abcfarma(ean):
                 cur.execute(
                     f"SELECT {', '.join(CAMPOS)} FROM abcfarma_medicamentos "
                     "WHERE ean = %s "
-                    "ORDER BY (registro_anvisa IS NULL), codigo_produto "
+                    "ORDER BY (registro_ms IS NULL), codigo_produto "
                     "LIMIT 1",
                     (ean_normalizado,),
                 )

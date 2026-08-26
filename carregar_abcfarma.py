@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS abcfarma_medicamentos (
     descricao_produto   TEXT NOT NULL,
     apresentacao        TEXT,
     laboratorio         TEXT NOT NULL,
-    registro_anvisa     TEXT,
+    registro_ms         TEXT,
     tipo_medicamento    TEXT,
     principio_ativo     TEXT,
     produto_referencia  TEXT,
@@ -98,7 +98,7 @@ def carregar_medicamentos(caminho_xlsx):
                 """
                 INSERT INTO abcfarma_medicamentos (
                     codigo_produto, ean, descricao_produto, apresentacao,
-                    laboratorio, registro_anvisa, tipo_medicamento,
+                    laboratorio, registro_ms, tipo_medicamento,
                     principio_ativo, produto_referencia, ggrem
                 )
                 VALUES %s

@@ -7,6 +7,7 @@ FaseProduto = Literal["pendente", "concluido", "nao_localizado"]
 TipoProduto = Literal["medicamento", "nao_medicamento"]
 Tarja = Literal["sem_tarja", "vermelha", "preta", "nao_aplicavel"]
 OrigemCategorizacao = Literal["mapeamento_iqvia", "mapeamento_cmed", "ia"]
+OrigemEnriquecimento = Literal["anvisa_cmed", "abcfarma", "iqvia", "crawler", "claude"]
 
 
 class CadastroProduto(BaseModel):
@@ -32,7 +33,8 @@ class CadastroProduto(BaseModel):
     pagina_produto_url: Optional[str] = None
     preco_pesquisado: Optional[str] = None
     data_pesquisa: Optional[date] = None
-    origem_enriquecimento: Optional[str] = None
+    origem_enriquecimento: Optional[OrigemEnriquecimento] = None
+    origem_referencia: Optional[str] = None
     confirmado_anvisa_cmed: Optional[bool] = None
     precisa_validacao_humana: Optional[bool] = None
     mensagem_validacao_humana: Optional[str] = None
@@ -50,7 +52,8 @@ class ProdutoResumo(BaseModel):
     tipo_produto: Optional[TipoProduto] = None
     tarja: Optional[Tarja] = None
     fase_atual: FaseProduto
-    origem_enriquecimento: Optional[str] = None
+    origem_enriquecimento: Optional[OrigemEnriquecimento] = None
+    origem_referencia: Optional[str] = None
     precisa_validacao_humana: Optional[bool] = None
     categoria_id: Optional[int] = None
     departamento: Optional[str] = None

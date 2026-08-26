@@ -38,6 +38,20 @@ ORIGEM_CAT_IQVIA = "mapeamento_iqvia"
 ORIGEM_CAT_CMED = "mapeamento_cmed"
 ORIGEM_CAT_IA = "ia"
 
+ORIGEM_ANVISA_CMED = "anvisa_cmed"
+ORIGEM_ABCFARMA = "abcfarma"
+ORIGEM_IQVIA = "iqvia"
+ORIGEM_CRAWLER = "crawler"
+ORIGEM_CLAUDE = "claude"
+
+ORIGENS_ENRIQUECIMENTO = {
+    ORIGEM_ANVISA_CMED: "ANVISA/CMED",
+    ORIGEM_ABCFARMA: "ABCFarma",
+    ORIGEM_IQVIA: "IQVIA",
+    ORIGEM_CRAWLER: "Crawler",
+    ORIGEM_CLAUDE: "Claude",
+}
+
 _BOOL_TRUE = {"sim", "true", "1", "yes", "s"}
 _BOOL_FALSE = {"não", "nao", "false", "0", "no", "n"}
 
@@ -140,6 +154,46 @@ def eh_verdadeiro(valor):
     return parse_bool(valor) is True
 
 
+def parse_origem_enriquecimento(valor):
+    """
+    Código fechado + detalhe opcional. Aceita o formato antigo
+    `anvisa_cmed (GGREM 123)` / `crawler+claude (raia,panvel)`.
+    """
+    if valor is None or valor == "":
+        return None, None
+    texto = str(valor).strip()
+    if texto in ORIGENS_ENRIQUECIMENTO:
+        return texto, None
+
+    codigo = texto
+    referencia = None
+    if " (" in texto and texto.endswith(")"):
+        codigo, _, resto = texto.partition(" (")
+        referencia = resto[:-1].strip() or None
+        codigo = codigo.strip()
+        for prefixo in ("GGREM ", "FCC ", "produto "):
+            if referencia and referencia.startswith(prefixo):
+                referencia = referencia[len(prefixo):].strip() or None
+                break
+
+    if codigo in ("crawler+claude", "crawler"):
+        codigo = ORIGEM_CRAWLER
+    if codigo not in ORIGENS_ENRIQUECIMENTO:
+        return None, referencia
+    return codigo, referencia
+
+
+def origem_codigo(data_ou_valor):
+    if isinstance(data_ou_valor, dict):
+        data_ou_valor = data_ou_valor.get("origem_enriquecimento")
+    codigo, _ = parse_origem_enriquecimento(data_ou_valor)
+    return codigo
+
+
+def nome_origem_enriquecimento(codigo):
+    return ORIGENS_ENRIQUECIMENTO.get(codigo)
+
+
 def normalizar_cadastro(data):
     """
     Converte rótulos/legado para o vocabulário persistido, in-place.
@@ -160,4 +214,9 @@ def normalizar_cadastro(data):
         data["modelo"] = data.pop("model")
     else:
         data.pop("model", None)
+    if "origem_enriquecimento" in data:
+        codigo, referencia = parse_origem_enriquecimento(data.get("origem_enriquecimento"))
+        data["origem_enriquecimento"] = codigo
+        if not data.get("origem_referencia") and referencia:
+            data["origem_referencia"] = referencia
     return data

@@ -30,13 +30,22 @@ from pypdf import PdfReader
 from db import conectar
 
 SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS fontes_substancia (
+    codigo TEXT PRIMARY KEY,
+    nome   TEXT NOT NULL UNIQUE
+);
+INSERT INTO fontes_substancia (codigo, nome) VALUES
+    ('portaria_344', 'Portaria SVS/MS nº 344/1998'),
+    ('in_360_2025', 'IN Anvisa 360/2025')
+ON CONFLICT (codigo) DO UPDATE SET nome = EXCLUDED.nome;
+
 CREATE TABLE IF NOT EXISTS substancias_controladas (
     id                     SERIAL PRIMARY KEY,
-    fonte                  TEXT NOT NULL,   -- 'portaria_344' | 'in_360_2025'
-    lista                  TEXT NOT NULL,   -- 'A1'..'E', ou 'antimicrobianos'/'glp1'
+    fonte                  TEXT NOT NULL REFERENCES fontes_substancia(codigo),
+    lista                  TEXT NOT NULL,
     descricao_lista        TEXT NOT NULL,
     substancia             TEXT NOT NULL,
-    validade_receita_dias  INTEGER,         -- só preenchido pra fonte in_360_2025
+    validade_receita_dias  INTEGER,
     criado_em              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """

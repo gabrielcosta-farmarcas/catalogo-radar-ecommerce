@@ -38,6 +38,11 @@ from PIL import Image, UnidentifiedImageError
 import categorias
 import dominios
 from dominios import (
+    ORIGEM_ABCFARMA,
+    ORIGEM_ANVISA_CMED,
+    ORIGEM_CLAUDE,
+    ORIGEM_CRAWLER,
+    ORIGEM_IQVIA,
     TARJA_NAO_APLICAVEL,
     TARJA_PRETA,
     TARJA_VERMELHA,
@@ -45,6 +50,7 @@ from dominios import (
     eh_medicamento,
     eh_verdadeiro,
     nome_tipo_produto,
+    origem_codigo,
 )
 
 
@@ -305,12 +311,12 @@ def marcar_validacao_humana(data):
     """
     if not data:
         return data
-    origem = str(data.get("origem_enriquecimento") or "claude").strip().lower()
-    so_web = origem.startswith("claude")
-    so_cmed = origem.startswith(ORIGEM_ANVISA_CMED)
-    so_abcfarma = origem.startswith(ORIGEM_ABCFARMA)
-    so_iqvia = origem.startswith(ORIGEM_IQVIA)
-    so_crawler = origem.startswith("crawler")
+    origem = origem_codigo(data) or ORIGEM_CLAUDE
+    so_web = origem == ORIGEM_CLAUDE
+    so_cmed = origem == ORIGEM_ANVISA_CMED
+    so_abcfarma = origem == ORIGEM_ABCFARMA
+    so_iqvia = origem == ORIGEM_IQVIA
+    so_crawler = origem == ORIGEM_CRAWLER
     medicamento = eh_medicamento(data)
     tarja_bulario = eh_verdadeiro(data.get("tarja_confirmada_bulario"))
     tarja_mip_iqvia = eh_verdadeiro(data.get("tarja_confirmada_iqvia_mip"))
@@ -1229,25 +1235,6 @@ def _ferramentas_tarja(max_uses=2):
 
 ALLOWED_TARJA = set(dominios.TARJAS)
 
-# prefixo de origem_enriquecimento usado pela camada 0 (cmed.py, ver
-# enrich_com_crawler.py) - mesmo valor de cmed.ORIGEM_ANVISA_CMED, duplicado
-# aqui só como uma string pra não criar dependência deste módulo em cmed.py
-ORIGEM_ANVISA_CMED = "anvisa_cmed"
-# idem, mas pra segunda fonte oficial (abcfarma.py) - mesmo valor de
-# abcfarma.ORIGEM_ABCFARMA. Ao contrário da CMED, a ABCFarma não traz tarja,
-# então essa origem só cobre a exceção de "fonte sem URL" pros campos que ela
-# de fato confirma (registro_ms/generico/principios_ativos/departamento/
-# categoria) - tarja continua null e vai pra fila de validação humana (ver
-# marcar_validacao_humana).
-ORIGEM_ABCFARMA = "abcfarma"
-# idem, mas pra terceira fonte de referência (iqvia.py) - mesmo valor de
-# iqvia.ORIGEM_IQVIA. Cobre não-medicamento também (ao contrário de CMED/
-# ABCFarma) e, pra medicamento, já diz "precisa receita" (RX) vs "isento de
-# prescrição" (MIP) - MIP é confirmado direto (ver
-# tarja_confirmada_iqvia_mip); RX não distingue Vermelha de Preta, então
-# segue a mesma régua de tarja não confirmada por fonte oficial da ABCFarma.
-ORIGEM_IQVIA = "iqvia"
-
 FRASE_VENDA_PRESCRICAO = "VENDA SOB PRESCRIÇÃO MÉDICA."
 # usada no lugar de FRASE_VENDA_PRESCRICAO quando precisa_retencao_receita
 # for "Sim" - texto oficial da Portaria 344 (ex: adendo 2 da Lista A1)
@@ -1646,13 +1633,13 @@ def apply_safety_checks(data, ean):
     # abcfarma, ou de origem iqvia sem ser essa exceção (ex: RX, que só diz
     # "precisa receita" sem distinguir Vermelha de Preta), não é uma fonte
     # confirmada e deve continuar sendo zerado por essa regra.
-    origem_enriquecimento_str = str(data.get("origem_enriquecimento") or "")
-    origem_e_cmed = origem_enriquecimento_str.startswith(ORIGEM_ANVISA_CMED)
+    origem = origem_codigo(data)
+    origem_e_cmed = origem == ORIGEM_ANVISA_CMED
     tarja_iqvia_mip_confirmada = eh_verdadeiro(data.get("tarja_confirmada_iqvia_mip"))
-    origem_confiavel_sem_url = (
-        origem_e_cmed
-        or origem_enriquecimento_str.startswith(ORIGEM_ABCFARMA)
-        or origem_enriquecimento_str.startswith(ORIGEM_IQVIA)
+    origem_confiavel_sem_url = origem in (
+        ORIGEM_ANVISA_CMED,
+        ORIGEM_ABCFARMA,
+        ORIGEM_IQVIA,
     )
 
     # tarja sem fonte confirmada: já vimos o modelo alucinar tarja mais de uma
@@ -2105,7 +2092,13 @@ FASES_TERMINAIS = ("concluido", "nao_localizado")
 # colunas gravadas em produtos além de RESULT_COLUMNS/VALIDACAO_COLUMNS - vêm
 # de fontes oficiais (CMED/ABCFarma/IQVIA/crawler) em enrich_com_crawler.py,
 # não da resposta do Claude puro
-COLUNAS_ORIGEM = ["origem_enriquecimento", "confirmado_anvisa_cmed", "origem_categorizacao", "modelo"]
+COLUNAS_ORIGEM = [
+    "origem_enriquecimento",
+    "origem_referencia",
+    "confirmado_anvisa_cmed",
+    "origem_categorizacao",
+    "modelo",
+]
 
 
 def conectar():

@@ -92,17 +92,17 @@ def extrair_categorias_brutas_distintas(conn):
     """
     Mesma derivação de categoria_bruta já usada em mapear_cmed_para_schema
     (enrich_com_crawler.py): classe_terapeutica sozinha, ou com o sufixo de
-    fitoterápico quando tipo_produto confirma isso.
+    fitoterápico quando tipo_medicamento confirma isso.
     """
     with conn.cursor() as cur:
-        cur.execute("SELECT DISTINCT classe_terapeutica, tipo_produto FROM anvisa_medicamentos")
+        cur.execute("SELECT DISTINCT classe_terapeutica, tipo_medicamento FROM anvisa_medicamentos")
         linhas = cur.fetchall()
 
     vistas = set()
     resultado = []
-    for classe, tipo_produto in linhas:
+    for classe, tipo_medicamento in linhas:
         bruta = classe
-        if tipo_produto == "Fitoterápico":
+        if tipo_medicamento == "Fitoterápico":
             bruta = f"{classe} (tipo_produto CMED: Fitoterápico)"
         if bruta in vistas:
             continue

@@ -15,6 +15,7 @@ import os
 import psycopg2
 
 from cmed import normalizar_ean
+from dominios import ORIGEM_IQVIA
 
 DB_CONFIG = {
     "host": os.environ.get("PG_HOST", "localhost"),
@@ -39,8 +40,6 @@ SETORES_MEDICAMENTO = {
     "RX_PROMOVIDO", "RX_GENERICO", "RX_TRADE",
     "MIP_MARCA", "MIP_TRADE", "MIP_GENERICO",
 }
-
-ORIGEM_IQVIA = "iqvia"
 
 
 def conectar():

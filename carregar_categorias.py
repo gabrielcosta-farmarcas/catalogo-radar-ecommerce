@@ -26,7 +26,7 @@ from dominios import parse_tipo_produto
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS categorias (
     id            SERIAL PRIMARY KEY,
-    tipo_produto  TEXT NOT NULL,
+    tipo_produto  TEXT NOT NULL REFERENCES tipos_produto(codigo),
     departamento  TEXT NOT NULL,
     categoria     TEXT NOT NULL,
     subcategoria  TEXT NOT NULL,

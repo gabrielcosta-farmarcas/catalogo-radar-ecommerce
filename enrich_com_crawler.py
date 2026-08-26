@@ -23,8 +23,9 @@ camadas, da mais barata pra mais cara:
 2. Claude puro (enrich_produtos.py) com busca agentic completa - só quando
    as camadas acima não encontram nada usável.
 
-Cada linha grava de onde veio o dado, na coluna `origem_enriquecimento`
-("anvisa_cmed", "abcfarma", "iqvia", "crawler+claude" ou "claude").
+Cada linha grava de onde veio o dado em `origem_enriquecimento`
+(`anvisa_cmed`, `abcfarma`, `iqvia`, `crawler` ou `claude`) e o id da fonte
+em `origem_referencia` (GGREM, código ABCFarma, FCC, farmácias).
 Medicamento encontrado só via Claude (busca na internet) recebe
 `precisa_validacao_humana=Sim` e uma mensagem para revisão humana antes de
 ir ao e-commerce; medicamento confirmado só pela ABCFarma, ou pela IQVIA
@@ -67,11 +68,17 @@ import iqvia
 import substancias_controladas
 import enrich_produtos as ep
 from dominios import (
+    ORIGEM_ABCFARMA,
+    ORIGEM_ANVISA_CMED,
+    ORIGEM_CLAUDE,
+    ORIGEM_CRAWLER,
+    ORIGEM_IQVIA,
     TARJA_PRETA,
     TARJA_SEM,
     TARJA_VERMELHA,
     TIPO_MEDICAMENTO,
     TIPO_NAO_MEDICAMENTO,
+    origem_codigo,
 )
 
 CLIENT = None
@@ -393,7 +400,8 @@ def mapear_para_schema(resultado, fontes, client, model):
         # mesmo quando o crawler acha o produto, título/categoria/descrição
         # ainda passam por uma chamada ao Claude (sem busca) - o rótulo deixa
         # isso explícito, em vez de sugerir que nenhum token de LLM foi gasto
-        "origem_enriquecimento": f"crawler+claude ({','.join(fontes)})",
+        "origem_enriquecimento": ORIGEM_CRAWLER,
+        "origem_referencia": ",".join(fontes) if fontes else None,
         "confirmado_anvisa_cmed": False,
         "tarja_confirmada_bulario": (
             True if resultado.get("_tarja_fonte") == "sara" else False
@@ -479,7 +487,7 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
     produto = medicamento["produto"]
     apresentacao = medicamento["apresentacao"]
 
-    # tipo_produto da CMED já diz com certeza se é genérico - é a mesma
+    # tipo_medicamento da CMED já diz com certeza se é genérico - é a mesma
     # coluna que db.py usa pra decidir o campo `generico` (ver
     # verificar_cmed) - então não precisa adivinhar por comparação de nome.
     # Isso importa porque a comparação normalizada abaixo falha em
@@ -490,7 +498,7 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
     # concluir "tem marca própria", preenchendo marca com o nome do
     # princípio ativo e quebrando o formato "[Fabricante] Genérico" no
     # título (ver FORMAT_CAMPOS_SYSTEM em enrich_produtos.py).
-    if medicamento["tipo_produto"] == "Genérico":
+    if medicamento["tipo_medicamento"] == "Genérico":
         marca = None
     else:
         # normaliza sem sufixo de hidratação antes de comparar - produto às
@@ -518,10 +526,10 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
     # Cordia Verbenacea) ora em "Dor e Febre", ora em "Fitoterápicos e
     # naturais" - instável mesmo rodando o mesmo produto várias vezes,
     # porque faltava dizer que a CMED já classifica esse produto como
-    # Fitoterápico (tipo_produto), não só a classe terapêutica. Passar essa
+    # Fitoterápico (tipo_medicamento), não só a classe terapêutica. Passar essa
     # dica junto estabilizou 100% num teste com 6 repetições.
     categoria_bruta = medicamento["classe_terapeutica"]
-    if medicamento["tipo_produto"] == "Fitoterápico":
+    if medicamento["tipo_medicamento"] == "Fitoterápico":
         categoria_bruta = f"{categoria_bruta} (tipo_produto CMED: Fitoterápico)"
 
     # de-para revisado por humano (ver mapear_categorias_cmed.py) tem
@@ -561,8 +569,8 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
         "marca": marca,
         "fabricante": medicamento["laboratorio"],
         "tipo_produto": TIPO_MEDICAMENTO,
-        "registro_ms": medicamento["registro"],
-        "generico": medicamento["tipo_produto"] == "Genérico",
+        "registro_ms": medicamento["registro_ms"],
+        "generico": medicamento["tipo_medicamento"] == "Genérico",
         "tarja": tarja_final,
         "precisa_retencao_receita": retencao_final,
         "principios_ativos": principios_ativos,
@@ -576,7 +584,8 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
         # medicamento nunca leva imagem (apply_safety_checks reforça).
         "imagem_url": None,
         "pagina_produto_url": None,
-        "origem_enriquecimento": f"{cmed.ORIGEM_ANVISA_CMED} (GGREM {medicamento['codigo_ggrem']})",
+        "origem_enriquecimento": ORIGEM_ANVISA_CMED,
+        "origem_referencia": medicamento["ggrem"],
         "confirmado_anvisa_cmed": True,
     }
 
@@ -672,7 +681,7 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
         "marca": marca,
         "fabricante": medicamento["laboratorio"],
         "tipo_produto": TIPO_MEDICAMENTO,
-        "registro_ms": medicamento["registro_anvisa"],
+        "registro_ms": medicamento["registro_ms"],
         "generico": medicamento["tipo_medicamento"] == "GENERICO",
         "tarja": tarja_crawler,
         "principios_ativos": principios_ativos,
@@ -686,9 +695,8 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
         # medicamento nunca leva imagem (apply_safety_checks reforça).
         "imagem_url": None,
         "pagina_produto_url": pagina_produto_url,
-        "origem_enriquecimento": (
-            f"{abcfarma.ORIGEM_ABCFARMA} (produto {medicamento['codigo_produto']})"
-        ),
+        "origem_enriquecimento": ORIGEM_ABCFARMA,
+        "origem_referencia": medicamento["codigo_produto"],
         "confirmado_anvisa_cmed": False,
         "tarja_confirmada_bulario": tarja_confirmada_bulario,
     }
@@ -886,7 +894,8 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
         # não-medicamento. Medicamento sai sem imagem (regra de negócio).
         "imagem_url": None if eh_medicamento else resultado_crawler.get("image1"),
         "pagina_produto_url": pagina_produto_url,
-        "origem_enriquecimento": f"{iqvia.ORIGEM_IQVIA} (FCC {produto['fcc']})",
+        "origem_enriquecimento": ORIGEM_IQVIA,
+        "origem_referencia": produto["fcc"],
         "confirmado_anvisa_cmed": False,
         "tarja_confirmada_bulario": tarja_confirmada_bulario,
         "tarja_confirmada_iqvia_mip": tarja_confirmada_iqvia_mip,
@@ -1013,7 +1022,8 @@ def worker(ean, nome_produto, args):
     for chave in usage_total:
         usage_total[chave] += usage_claude[chave]
     if data is not None:
-        data["origem_enriquecimento"] = "claude"
+        data["origem_enriquecimento"] = ORIGEM_CLAUDE
+        data["origem_referencia"] = None
         data["confirmado_anvisa_cmed"] = False
         data = ep.marcar_validacao_humana(data)
     return ean, nome_produto, data, usage_total
@@ -1114,8 +1124,14 @@ def main():
         print(f"{total} produto(s) pendente(s) na tabela produtos.")
 
         processed = 0
-        origem_counts = {"anvisa_cmed": 0, "abcfarma": 0, "crawler+claude": 0, "claude": 0}
-        tokens_por_origem = {"anvisa_cmed": 0, "abcfarma": 0, "crawler+claude": 0, "claude": 0}
+        origem_counts = {
+            ORIGEM_ANVISA_CMED: 0,
+            ORIGEM_ABCFARMA: 0,
+            ORIGEM_IQVIA: 0,
+            ORIGEM_CRAWLER: 0,
+            ORIGEM_CLAUDE: 0,
+        }
+        tokens_por_origem = dict(origem_counts)
         revisao_humana = 0
         with ThreadPoolExecutor(max_workers=max(1, args.concurrency)) as pool:
             futures = {
@@ -1126,19 +1142,14 @@ def main():
                 ean, nome_produto, data, usage = future.result()
                 ep.salvar_resultado(conn, ean, data, usage)
 
-                origem = "claude"
+                origem = ORIGEM_CLAUDE
                 status = ep.STATUS_NOT_FOUND
                 if data is not None and data.get("titulo"):
                     status = ep.STATUS_OK
-                    origem_bruta = str(data.get("origem_enriquecimento", ""))
-                    if origem_bruta.startswith(cmed.ORIGEM_ANVISA_CMED):
-                        origem = "anvisa_cmed"
-                    elif origem_bruta.startswith(abcfarma.ORIGEM_ABCFARMA):
-                        origem = "abcfarma"
-                    elif origem_bruta.startswith("crawler"):
-                        origem = "crawler+claude"
-                    else:
-                        origem = "claude"
+                    origem = origem_codigo(data) or ORIGEM_CLAUDE
+                    if origem not in origem_counts:
+                        origem_counts[origem] = 0
+                        tokens_por_origem[origem] = 0
                     origem_counts[origem] += 1
                     if ep.eh_verdadeiro(data.get(ep.VALIDACAO_HUMANA_COLUMN)):
                         revisao_humana += 1
@@ -1153,14 +1164,16 @@ def main():
                       f"({data.get('origem_enriquecimento') if data else '-'} | {usage['tokens']} tokens{revisao})")
 
         print(
-            f"Concluído. {origem_counts['anvisa_cmed']} via anvisa_cmed "
-            f"({tokens_por_origem['anvisa_cmed']} tokens, tabela oficial ANVISA - sem busca, sem dupla verificação de tarja), "
-            f"{origem_counts['abcfarma']} via abcfarma "
-            f"({tokens_por_origem['abcfarma']} tokens, tabela ABCFarma - sem busca, tarja pendente de validação humana), "
-            f"{origem_counts['crawler+claude']} via crawler+claude "
-            f"({tokens_por_origem['crawler+claude']} tokens, só título/categoria/descrição - sem busca), "
-            f"{origem_counts['claude']} via Claude puro "
-            f"({tokens_por_origem['claude']} tokens, com busca agentic completa, "
+            f"Concluído. {origem_counts[ORIGEM_ANVISA_CMED]} via anvisa_cmed "
+            f"({tokens_por_origem[ORIGEM_ANVISA_CMED]} tokens, tabela oficial ANVISA - sem busca, sem dupla verificação de tarja), "
+            f"{origem_counts[ORIGEM_ABCFARMA]} via abcfarma "
+            f"({tokens_por_origem[ORIGEM_ABCFARMA]} tokens, tabela ABCFarma - sem busca, tarja pendente de validação humana), "
+            f"{origem_counts[ORIGEM_IQVIA]} via iqvia "
+            f"({tokens_por_origem[ORIGEM_IQVIA]} tokens, catálogo IQVIA), "
+            f"{origem_counts[ORIGEM_CRAWLER]} via crawler "
+            f"({tokens_por_origem[ORIGEM_CRAWLER]} tokens, só título/categoria/descrição - sem busca), "
+            f"{origem_counts[ORIGEM_CLAUDE]} via Claude puro "
+            f"({tokens_por_origem[ORIGEM_CLAUDE]} tokens, com busca agentic completa, "
             f"{revisao_humana} medicamento(s) na fila de validação humana)."
         )
     finally:

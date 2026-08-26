@@ -10,4 +10,6 @@ def listar() -> dict:
             tipos = [dict(row) for row in cur.fetchall()]
             cur.execute("SELECT codigo, nome FROM tarjas ORDER BY codigo")
             tarjas = [dict(row) for row in cur.fetchall()]
-    return {"tipos_produto": tipos, "tarjas": tarjas}
+            cur.execute("SELECT codigo, nome FROM origens_enriquecimento ORDER BY codigo")
+            origens = [dict(row) for row in cur.fetchall()]
+    return {"tipos_produto": tipos, "tarjas": tarjas, "origens_enriquecimento": origens}

@@ -16,7 +16,7 @@ import re
 
 import psycopg2
 
-from dominios import TARJA_PRETA, TARJA_SEM, TARJA_VERMELHA
+from dominios import ORIGEM_ANVISA_CMED, TARJA_PRETA, TARJA_SEM, TARJA_VERMELHA
 
 DB_CONFIG = {
     "host": os.environ.get("PG_HOST", "localhost"),
@@ -27,8 +27,8 @@ DB_CONFIG = {
 }
 
 CAMPOS = (
-    "codigo_ggrem", "substancia", "laboratorio", "registro",
-    "produto", "apresentacao", "classe_terapeutica", "tipo_produto", "tarja",
+    "ggrem", "substancia", "laboratorio", "registro_ms",
+    "produto", "apresentacao", "classe_terapeutica", "tipo_medicamento", "tarja",
 )
 
 # a tabela vem com valores de TARJA no formato bruto da planilha da ANVISA -
@@ -45,11 +45,6 @@ TARJA_CMED_PARA_SCHEMA = {
     "Tarja Preta": TARJA_PRETA,
     "Tarja Sem Tarja": TARJA_SEM,
 }
-
-# marcador de origem usado em origem_enriquecimento - apply_safety_checks usa
-# esse prefixo para dispensar a exigência de pagina_produto_url (a CMED é uma
-# tabela de referência, não uma página web, mas é uma fonte oficial confiável)
-ORIGEM_ANVISA_CMED = "anvisa_cmed"
 
 
 def conectar():
