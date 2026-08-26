@@ -48,12 +48,12 @@ _carregar_dotenv()
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS mapeamento_categoria_cmed (
-    id                    BIGSERIAL PRIMARY KEY,
-    categoria_bruta       TEXT NOT NULL,
-    categoria_id          BIGINT REFERENCES categorias(id),
-    revisado_humanamente  BOOLEAN NOT NULL DEFAULT false,
-    criado_em             TIMESTAMPTZ NOT NULL DEFAULT now(),
-    atualizado_em         TIMESTAMPTZ NOT NULL DEFAULT now()
+    id               BIGSERIAL PRIMARY KEY,
+    categoria_bruta  TEXT NOT NULL,
+    categoria_id     BIGINT REFERENCES categorias(id),
+    revisado         BOOLEAN NOT NULL DEFAULT false,
+    criado_em        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    atualizado_em    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS mapeamento_categoria_cmed_chave ON mapeamento_categoria_cmed (categoria_bruta);
 """
@@ -195,7 +195,7 @@ def popular(model="claude-haiku-4-5-20251001", tamanho_lote=25):
                         VALUES (%s, %s)
                         ON CONFLICT (categoria_bruta)
                         DO UPDATE SET categoria_id = EXCLUDED.categoria_id,
-                                      revisado_humanamente = false,
+                                      revisado = false,
                                       atualizado_em = now()
                         """,
                         (bruta, categoria_id),
@@ -207,7 +207,7 @@ def popular(model="claude-haiku-4-5-20251001", tamanho_lote=25):
         print(
             f"\nConcluído. {gravadas} categoria(s) gravada(s) "
             f"({zeradas} zerada(s) por não bater com a árvore oficial). "
-            "Tudo com revisado_humanamente=false - revisar antes de usar no fluxo de enriquecimento."
+            "Tudo com revisado=false - revisar antes de usar no fluxo de enriquecimento."
         )
     finally:
         conn.close()

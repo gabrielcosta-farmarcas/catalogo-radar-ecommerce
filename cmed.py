@@ -114,7 +114,7 @@ def buscar_categoria_mapeada(categoria_bruta):
                 SELECT m.categoria_id, c.departamento, c.categoria, c.subcategoria
                 FROM mapeamento_categoria_cmed m
                 LEFT JOIN categorias c ON c.id = m.categoria_id
-                WHERE m.categoria_bruta = %s AND m.revisado_humanamente = true
+                WHERE m.categoria_bruta = %s AND m.revisado = true
                 """,
                 (categoria_bruta,),
             )

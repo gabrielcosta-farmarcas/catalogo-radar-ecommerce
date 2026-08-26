@@ -110,7 +110,7 @@ def buscar_categoria_mapeada(tipo_produto, area_farmacia, sub_cat1, sub_cat2, su
                   AND coalesce(m.sub_cat2, '') = coalesce(%s, '')
                   AND coalesce(m.sub_cat3, '') = coalesce(%s, '')
                   AND coalesce(m.sub_cat4, '') = coalesce(%s, '')
-                  AND m.revisado_humanamente = true
+                  AND m.revisado = true
                 """,
                 (tipo_produto, area_farmacia, sub_cat1, sub_cat2, sub_cat3, sub_cat4),
             )

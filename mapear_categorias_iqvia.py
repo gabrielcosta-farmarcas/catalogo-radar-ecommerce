@@ -51,17 +51,17 @@ _carregar_dotenv()
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS mapeamento_categoria_iqvia (
-    id                    BIGSERIAL PRIMARY KEY,
-    tipo_produto          TEXT NOT NULL REFERENCES tipos_produto(codigo),
-    area_farmacia         TEXT,
-    sub_cat1              TEXT,
-    sub_cat2              TEXT,
-    sub_cat3              TEXT,
-    sub_cat4              TEXT,
-    categoria_id          BIGINT REFERENCES categorias(id),
-    revisado_humanamente  BOOLEAN NOT NULL DEFAULT false,
-    criado_em             TIMESTAMPTZ NOT NULL DEFAULT now(),
-    atualizado_em         TIMESTAMPTZ NOT NULL DEFAULT now()
+    id             BIGSERIAL PRIMARY KEY,
+    tipo_produto   TEXT NOT NULL REFERENCES tipos_produto(codigo),
+    area_farmacia  TEXT,
+    sub_cat1       TEXT,
+    sub_cat2       TEXT,
+    sub_cat3       TEXT,
+    sub_cat4       TEXT,
+    categoria_id   BIGINT REFERENCES categorias(id),
+    revisado       BOOLEAN NOT NULL DEFAULT false,
+    criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE UNIQUE INDEX IF NOT EXISTS mapeamento_categoria_iqvia_chave ON mapeamento_categoria_iqvia (
     tipo_produto,
@@ -218,7 +218,7 @@ def popular(model="claude-haiku-4-5-20251001", tamanho_lote=25):
                             ON CONFLICT (tipo_produto, coalesce(area_farmacia, ''), coalesce(sub_cat1, ''),
                                          coalesce(sub_cat2, ''), coalesce(sub_cat3, ''), coalesce(sub_cat4, ''))
                             DO UPDATE SET categoria_id = EXCLUDED.categoria_id,
-                                          revisado_humanamente = false,
+                                          revisado = false,
                                           atualizado_em = now()
                             """,
                             (t, area, s1, s2, s3, s4, categoria_id),
@@ -230,7 +230,7 @@ def popular(model="claude-haiku-4-5-20251001", tamanho_lote=25):
         print(
             f"\nConcluído. {gravadas} combinação(ões) gravada(s) "
             f"({zeradas} zerada(s) por não bater com a árvore oficial). "
-            "Tudo com revisado_humanamente=false - revisar antes de usar no fluxo de enriquecimento."
+            "Tudo com revisado=false - revisar antes de usar no fluxo de enriquecimento."
         )
     finally:
         conn.close()
