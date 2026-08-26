@@ -11,5 +11,5 @@ router = APIRouter(prefix="/fontes", tags=["fontes"])
 
 @router.get("/{ean}", response_model=FontesEan)
 def consultar(ean: EanPath) -> FontesEan:
-    """CMED, ABCFarma e IQVIA. Sem crawler e sem Claude."""
+    """CMED, ABCFarma, Tarjados e IQVIA. Sem crawler e sem Claude."""
     return fontes_service.consultar(ean)

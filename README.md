@@ -5,7 +5,7 @@
 1. [x] Mapear as tabelas do banco (`produtos`, `anvisa_medicamentos`, `abcfarma_medicamentos`, `iqvia_produtos`, `categorias`, entre outras usadas em `db.py` / `app/db.py`) e entender onde dá pra usar FK entre elas e o que precisa ser padronizado antes disso.
 2. [x] Atualizar a tabela de categorias, adicionando 4 novas categorias na tabela de referência.
 3. [x] Na planilha `mapeamento_categoria_iqvia`, trocar os itens marcados de amarelo para verde — amarelo está errado, verde é o que está correto conforme a validação da área e considerar apenas os produtos com `validacao_humana = true`.
-4. [ ] Criar uma base de medicamentos tarjados e consultá-la antes da tabela da IQVIA.
+4. [x] Criar uma base de medicamentos tarjados e consultá-la antes da tabela da IQVIA.
 5. [x] Colapsar o snapshot de `produtos_historico` (titulo, marca, categoria, tokens_*, etc.) num único campo `dados` (JSONB), mantendo `produto_id`/`ean`/`versionado_em` como colunas reais — evita `ALTER TABLE` a cada campo novo do enriquecimento, já que a tabela só é lida por completo (nunca filtrada por campo individual). `produto_id` já é FK real pra `produtos(id)`.
 
 

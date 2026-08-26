@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS origens_enriquecimento (
 INSERT INTO origens_enriquecimento (codigo, nome) VALUES
     ('anvisa_cmed', 'ANVISA/CMED'),
     ('abcfarma', 'ABCFarma'),
+    ('tarjados', 'Base de Tarjados'),
     ('iqvia', 'IQVIA'),
     ('crawler', 'Crawler'),
     ('claude', 'Claude')
@@ -80,7 +81,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 DO $$ BEGIN
-    CREATE TYPE origem_categorizacao AS ENUM ('mapeamento_iqvia', 'mapeamento_cmed', 'ia');
+    CREATE TYPE origem_categorizacao AS ENUM ('mapeamento_iqvia', 'mapeamento_cmed', 'mapeamento_tarjado', 'ia');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 

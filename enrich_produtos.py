@@ -43,6 +43,7 @@ from dominios import (
     ORIGEM_CLAUDE,
     ORIGEM_CRAWLER,
     ORIGEM_IQVIA,
+    ORIGEM_TARJADOS,
     TARJA_NAO_APLICAVEL,
     TARJA_PRETA,
     TARJA_VERMELHA,
@@ -289,25 +290,44 @@ MENSAGEM_VALIDACAO_IQVIA_TARJA = (
     "(bula/ANVISA)."
 )
 
+MENSAGEM_VALIDACAO_TARJADOS_TARJA = (
+    "VALIDAÇÃO HUMANA OBRIGATÓRIA: este medicamento foi confirmado pela "
+    "base de Tarjados do time (RX/CONTROLADO/NÃO INFORMADO), mas essa base "
+    "não distingue Tarja Vermelha de Tarja Preta, e a tarja não foi "
+    "confirmada nem pelo bulário nem por verificação dedicada. Não "
+    "publicar no e-commerce antes de um responsável confirmar a tarja em "
+    "fonte oficial (bula/ANVISA)."
+)
+
+MENSAGEM_VALIDACAO_TARJADOS_TIPO_AMBIGUO = (
+    "VALIDAÇÃO HUMANA OBRIGATÓRIA: este produto veio da base de Tarjados "
+    "com TIPO DE PRODUTO de medicamento (RX/CONTROLADO), mas a categoria "
+    "já revisada pelo time mapeia para o ramo Não Medicamento da árvore "
+    "oficial - confirmar se o tipo_produto está correto antes de publicar "
+    "no e-commerce."
+)
+
 
 def marcar_validacao_humana(data):
     """
     Medicamento achado só na web (origem claude) precisa de revisão humana
     antes de ir ao ar - fonte não rastreável nenhum campo. Medicamento
     confirmado pela ABCFarma (que não tem coluna de tarja - ver
-    ORIGEM_ABCFARMA) ou pela IQVIA como "RX" (que só diz "precisa receita",
-    sem distinguir Vermelha de Preta - ver ORIGEM_IQVIA) só entra na fila se
-    a tarja continuar sem confirmação depois das tentativas via crawler/
-    busca dedicada (ver mapear_abcfarma_para_schema/mapear_iqvia_para_schema
-    em enrich_com_crawler.py) - se o bulário (Sara) confirmar a tarja, o
-    resto dos campos já vem da fonte e a linha segue o fluxo normal. Tarja
-    só de farmácia (não Sara) também entra na fila: o modelo/site já inferiu
-    tarja errada antes. Medicamento IQVIA classificado como "MIP"
-    (Medicamento Isento de Prescrição - categoria regulatória oficial, não
-    inferência de site) tem a tarja confirmada direto (ver
-    tarja_confirmada_iqvia_mip) e não entra na fila só por causa disso. CMED
-    e crawler com tarja do Sara seguem o fluxo normal. Não-medicamento nunca
-    entra na fila, seja qual for a origem.
+    ORIGEM_ABCFARMA), pela base de Tarjados (que só diz RX/CONTROLADO/NÃO
+    INFORMADO, sem distinguir Vermelha de Preta - ver ORIGEM_TARJADOS) ou
+    pela IQVIA como "RX" (mesma limitação - ver ORIGEM_IQVIA) só entra na
+    fila se a tarja continuar sem confirmação depois das tentativas via
+    crawler/busca dedicada (ver mapear_abcfarma_para_schema/
+    mapear_tarjados_para_schema/mapear_iqvia_para_schema em
+    enrich_com_crawler.py) - se o bulário (Sara) confirmar a tarja, o resto
+    dos campos já vem da fonte e a linha segue o fluxo normal. Tarja só de
+    farmácia (não Sara) também entra na fila: o modelo/site já inferiu tarja
+    errada antes. Medicamento IQVIA classificado como "MIP" (Medicamento
+    Isento de Prescrição - categoria regulatória oficial, não inferência de
+    site) tem a tarja confirmada direto (ver tarja_confirmada_iqvia_mip) e
+    não entra na fila só por causa disso. CMED e crawler com tarja do Sara
+    seguem o fluxo normal. Não-medicamento nunca entra na fila, seja qual for
+    a origem.
     """
     if not data:
         return data
@@ -315,6 +335,7 @@ def marcar_validacao_humana(data):
     so_web = origem == ORIGEM_CLAUDE
     so_cmed = origem == ORIGEM_ANVISA_CMED
     so_abcfarma = origem == ORIGEM_ABCFARMA
+    so_tarjados = origem == ORIGEM_TARJADOS
     so_iqvia = origem == ORIGEM_IQVIA
     so_crawler = origem == ORIGEM_CRAWLER
     medicamento = eh_medicamento(data)
@@ -333,10 +354,16 @@ def marcar_validacao_humana(data):
     elif medicamento and so_abcfarma and not data.get("tarja"):
         data[VALIDACAO_HUMANA_COLUMN] = True
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_ABCFARMA_TARJA
+    elif medicamento and so_tarjados and not data.get("tarja"):
+        data[VALIDACAO_HUMANA_COLUMN] = True
+        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_TARJADOS_TARJA
     elif medicamento and so_iqvia and not data.get("tarja"):
         data[VALIDACAO_HUMANA_COLUMN] = True
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_IQVIA_TARJA
     elif medicamento and so_abcfarma and not tarja_bulario:
+        data[VALIDACAO_HUMANA_COLUMN] = True
+        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CRAWLER_TARJA
+    elif medicamento and so_tarjados and not tarja_bulario:
         data[VALIDACAO_HUMANA_COLUMN] = True
         data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CRAWLER_TARJA
     elif medicamento and so_iqvia and not (tarja_bulario or tarja_mip_iqvia):
@@ -1061,6 +1088,17 @@ def formatar_composicao_iqvia(client, model, molecula, descricao_longa):
     return formatar_composicao_cmed(client, model, substancia_normalizada, descricao_longa)
 
 
+def formatar_composicao_tarjados(client, model, molecula, produto):
+    """
+    Como formatar_composicao_cmed, mas pra base de Tarjados: o campo
+    MOLECULA já separa substâncias por ";", igual à CMED - não precisa
+    normalizar separador, só reusa o mesmo parser/prompt. A base não tem uma
+    "apresentação" separada do nome (tudo vem junto em PRODUTO, mesmo caso
+    da IQVIA) - passa o campo inteiro como apresentação.
+    """
+    return formatar_composicao_cmed(client, model, molecula, produto)
+
+
 TARJA_VERIFICATION_SYSTEM = """Você é um farmacêutico especialista em regulação de medicamentos no \
 Brasil. Sua única tarefa é confirmar 2 campos regulatórios de UM medicamento específico, usando \
 fontes oficiais (bulário da ANVISA, bula do fabricante, ou farmácia online confiável) - NUNCA \
@@ -1622,23 +1660,24 @@ def apply_safety_checks(data, ean):
         print(f"  [aviso] tarja inválida para EAN {ean} ({tarja!r}) - zerada.")
         data["tarja"] = tarja = None
 
-    # fonte é uma tabela oficial (CMED, ABCFarma ou IQVIA), não uma página
-    # web - não tem pagina_produto_url por natureza, mas isso não significa
-    # fonte não confirmada, então a checagem de "campos dependentes de
-    # fonte" mais abaixo não se aplica a nenhuma das três. A exceção de
-    # tarja logo a seguir é mais restrita: só a CMED confirma tarja de fato
-    # sempre, e a IQVIA só quando é MIP (Medicamento Isento de Prescrição -
-    # categoria regulatória oficial, não inferência de site - ver
-    # tarja_confirmada_iqvia_mip) - um valor de tarja vindo de origem
-    # abcfarma, ou de origem iqvia sem ser essa exceção (ex: RX, que só diz
-    # "precisa receita" sem distinguir Vermelha de Preta), não é uma fonte
-    # confirmada e deve continuar sendo zerado por essa regra.
+    # fonte é uma tabela oficial (CMED, ABCFarma, Tarjados ou IQVIA), não uma
+    # página web - não tem pagina_produto_url por natureza, mas isso não
+    # significa fonte não confirmada, então a checagem de "campos
+    # dependentes de fonte" mais abaixo não se aplica a nenhuma delas. A
+    # exceção de tarja logo a seguir é mais restrita: só a CMED confirma
+    # tarja de fato sempre, e a IQVIA só quando é MIP (Medicamento Isento de
+    # Prescrição - categoria regulatória oficial, não inferência de site -
+    # ver tarja_confirmada_iqvia_mip) - um valor de tarja vindo de origem
+    # abcfarma/tarjados, ou de origem iqvia sem ser essa exceção (ex: RX, que
+    # só diz "precisa receita" sem distinguir Vermelha de Preta), não é uma
+    # fonte confirmada e deve continuar sendo zerado por essa regra.
     origem = origem_codigo(data)
     origem_e_cmed = origem == ORIGEM_ANVISA_CMED
     tarja_iqvia_mip_confirmada = eh_verdadeiro(data.get("tarja_confirmada_iqvia_mip"))
     origem_confiavel_sem_url = origem in (
         ORIGEM_ANVISA_CMED,
         ORIGEM_ABCFARMA,
+        ORIGEM_TARJADOS,
         ORIGEM_IQVIA,
     )
 

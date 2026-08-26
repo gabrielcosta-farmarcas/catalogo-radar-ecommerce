@@ -13,6 +13,7 @@ PESO = {
     "na_fila": 0,
     "cmed": 10,
     "abcfarma": 25,
+    "tarjados": 32,
     "iqvia": 40,
     "crawler": 55,
     "claude": 75,

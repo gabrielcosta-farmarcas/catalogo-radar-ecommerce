@@ -1,5 +1,5 @@
 """
-Enriquece produtos pendentes da tabela `produtos` (Postgres, ver db.py) em 5
+Enriquece produtos pendentes da tabela `produtos` (Postgres, ver db.py) em 6
 camadas, da mais barata pra mais cara:
 0. Tabela `anvisa_medicamentos` (base oficial da ANVISA/CMED, carregada por
    carregar_cmed.py) - se o EAN está lá, o produto É medicamento com certeza
@@ -10,28 +10,33 @@ camadas, da mais barata pra mais cara:
    só consultada se a CMED não achou o EAN. Diferente da CMED, não confirma
    tarja - essa fica null e vai pra fila de validação humana (ver
    abcfarma.py e ep.marcar_validacao_humana).
+0.6. Tabela `medicamentos_tarjados` (base curada pelo time, alimentada
+   diariamente, carregada por carregar_tarjados.py) - só consultada se CMED
+   e ABCFarma não acharam o EAN. Como a ABCFarma, não confirma tarja (só diz
+   RX/CONTROLADO/NÃO INFORMADO/NÃO MEDICAMENTO, sem distinguir Vermelha de
+   Preta) - mesma régua de validação humana (ver tarjados.py).
 0.7. Tabela `iqvia_produtos` (catálogo de um parceiro, carregado por
-   carregar_iqvia.py) - terceira fonte de referência, só consultada se CMED
-   e ABCFarma não acharam o EAN. Ao contrário das duas, cobre não-
-   medicamento também (cosmético, alimento etc. - ver iqvia.py). Pra
+   carregar_iqvia.py) - quarta fonte de referência, só consultada se CMED,
+   ABCFarma e Tarjados não acharam o EAN. Ao contrário das outras, cobre
+   não-medicamento também (cosmético, alimento etc. - ver iqvia.py). Pra
    medicamento, já diz "precisa receita" (RX) vs "isento de prescrição"
    (MIP) - MIP confirma tarja "Sem Tarja" direto (categoria regulatória
    oficial); RX não distingue Vermelha de Preta, mesma régua de validação
-   humana da ABCFarma.
+   humana da ABCFarma/Tarjados.
 1. crawler (pacote local `crawler/` - raspa sites de farmácias concorrentes
    e o portal de bulário sara.com.br por EAN, de graça, sem token nenhum).
 2. Claude puro (enrich_produtos.py) com busca agentic completa - só quando
    as camadas acima não encontram nada usável.
 
 Cada linha grava de onde veio o dado em `origem_enriquecimento`
-(`anvisa_cmed`, `abcfarma`, `iqvia`, `crawler` ou `claude`) e o id da fonte
-em `origem_referencia` (GGREM, código ABCFarma, FCC, farmácias).
-Medicamento encontrado só via Claude (busca na internet) recebe
+(`anvisa_cmed`, `abcfarma`, `tarjados`, `iqvia`, `crawler` ou `claude`) e o
+id da fonte em `origem_referencia` (GGREM, código ABCFarma, EAN, FCC,
+farmácias). Medicamento encontrado só via Claude (busca na internet) recebe
 `precisa_validacao_humana=Sim` e uma mensagem para revisão humana antes de
-ir ao e-commerce; medicamento confirmado só pela ABCFarma, ou pela IQVIA
-como RX, entra na mesma fila se a tarja não veio do bulário (Sara). Crawler
-com tarja só de farmácia (não Sara) também entra nessa fila. CMED, IQVIA
-como MIP e crawler com tarja do Sara não entram.
+ir ao e-commerce; medicamento confirmado só pela ABCFarma, pela base de
+Tarjados, ou pela IQVIA como RX, entra na mesma fila se a tarja não veio do
+bulário (Sara). Crawler com tarja só de farmácia (não Sara) também entra
+nessa fila. CMED, IQVIA como MIP e crawler com tarja do Sara não entram.
 
 Lê e grava os produtos pendentes direto na tabela `produtos` do Postgres
 (ver db.py) - não usa mais planilha como banco de trabalho.
@@ -66,6 +71,7 @@ import abcfarma
 import cmed
 import iqvia
 import substancias_controladas
+import tarjados
 import enrich_produtos as ep
 from dominios import (
     ORIGEM_ABCFARMA,
@@ -73,6 +79,7 @@ from dominios import (
     ORIGEM_CLAUDE,
     ORIGEM_CRAWLER,
     ORIGEM_IQVIA,
+    ORIGEM_TARJADOS,
     TARJA_PRETA,
     TARJA_SEM,
     TARJA_VERMELHA,
@@ -738,6 +745,184 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
     return ep.marcar_validacao_humana(data), usage
 
 
+def mapear_tarjados_para_schema(item, ean, client, model, verify_tarja=True):
+    """
+    Traduz o resultado da base de Tarjados (tarjados.py) pro schema da
+    planilha - camada de referência entre ABCFarma e IQVIA (ver worker()).
+    Curadoria própria do time, alimentada diariamente; ao contrário de
+    CMED/ABCFarma, não confirma tarja - a base só diz SETOR_NEC_ABERTO
+    (RX_*/MIP_*/NAO_MEDICAMENTO_*, mesmo vocabulário da IQVIA - ver
+    iqvia.eh_medicamento/eh_generico), sem distinguir Vermelha de Preta.
+
+    tipo_cadastro final vem da árvore oficial (categorias.tipo_produto),
+    resolvida via tarjados.buscar_categoria_mapeada, quando já existir de-para
+    revisado - não do SETOR_NEC_ABERTO bruto da origem. Isso importa porque a
+    validação do time já confirmou casos em que um produto originalmente
+    RX/CONTROLADO pertence de fato ao ramo Não Medicamento da árvore (ex:
+    dermocosmético com registro de medicamento) - nesse caso força
+    precisa_validacao_humana=True mesmo sem checar tarja, pra alguém
+    confirmar o tipo_produto antes de publicar. Sem de-para revisado ainda,
+    usa o SETOR_NEC_ABERTO bruto mesmo (fallback razoável, não uma correção
+    já validada).
+
+    titulo/descricao_curta (e departamento-categoria-subcategoria quando
+    ainda não há de-para revisado) passam por UMA chamada leve ao Claude,
+    sem busca, igual à CMED/IQVIA - a base não separa marca do nome do
+    produto, então marca sempre sai None. principios_ativos vem de MOLECULA,
+    que já separa substâncias por ";" (mesmo formato da CMED - ver
+    ep.formatar_composicao_tarjados).
+
+    Pra tarja, mesma lógica em camadas do caminho ABCFarma/IQVIA-RX (crawler,
+    depois verificação dedicada se verify_tarja=True) - a base não distingue
+    RX de CONTROLADO o suficiente pra confiar em nenhum dos dois sem
+    confirmação.
+
+    Retorna (data, usage).
+    """
+    produto_bruto = item["produto"]
+    fabricante = item["laboratorio"]
+    setor = item["setor_nec_aberto"]
+
+    categoria_mapeada = tarjados.buscar_categoria_mapeada(
+        item["secao"], item["nec1"], item["nec2"], item["nec3"]
+    )
+
+    tipo_cadastro_bruto = TIPO_MEDICAMENTO if iqvia.eh_medicamento(setor) else TIPO_NAO_MEDICAMENTO
+    tipo_cadastro = categoria_mapeada["tipo_produto"] if categoria_mapeada else tipo_cadastro_bruto
+    eh_medicamento_final = tipo_cadastro == TIPO_MEDICAMENTO
+    eh_generico = iqvia.eh_generico(setor) if eh_medicamento_final else None
+
+    # sinaliza pra validação humana quando o SETOR_NEC_ABERTO de origem
+    # indicava medicamento mas a categoria já revisada mapeou pro ramo Não
+    # Medicamento - inconsistência real vista na validação do time (ver
+    # mapeamento_categoria_tarjado), não bug de código.
+    tipo_ambiguo = tipo_cadastro_bruto == TIPO_MEDICAMENTO and tipo_cadastro == TIPO_NAO_MEDICAMENTO
+
+    usage = ep.usage_vazio()
+    principios_ativos = None
+    if eh_medicamento_final and item["molecula"]:
+        principios_ativos, usage = ep.formatar_composicao_tarjados(
+            client, model, item["molecula"], produto_bruto
+        )
+
+    tarja = None
+    tarja_confirmada_bulario = False
+    pagina_produto_url = None
+    registro_ms = None
+
+    if eh_medicamento_final:
+        # sem cor de tarja na fonte - mesma lógica em camadas do caminho
+        # ABCFarma/IQVIA-RX: crawler (Sara primeiro, 9 farmácias se
+        # precisar) e, se não achar, verificação dedicada via busca.
+        resultado_crawler, _fontes_crawler = buscar_no_crawler(
+            ean, parar_quando=lambda r, _f: bool(r.get("tarja"))
+        )
+        tarja_crawler = resultado_crawler.get("tarja")
+        if tarja_crawler:
+            tarja = tarja_crawler
+            pagina_produto_url = resultado_crawler.get("url")
+            tarja_confirmada_bulario = (
+                True if resultado_crawler.get("_tarja_fonte") == "sara" else False
+            )
+        registro_ms = resultado_crawler.get("ms_register")
+    else:
+        # não-medicamento - crawler só pra texto de descrição, mesmo corte
+        # leve da CMED/IQVIA (nunca a varredura completa das 9 farmácias)
+        resultado_crawler, _fontes_crawler = buscar_no_crawler(
+            ean, parar_quando=lambda _r, _f: True
+        )
+
+    descricao_bruta = (
+        resultado_crawler.get("description") or resultado_crawler.get("short_description")
+    )
+
+    categoria_bruta = " > ".join(
+        p for p in (item["secao"], item["nec1"], item["nec2"], item["nec3"]) if p
+    ) or None
+
+    formatados, usage_fmt = ep.formatar_campos_confirmados(
+        client,
+        model,
+        tipo_cadastro,
+        None,
+        principios_ativos,
+        produto_bruto,
+        produto_bruto,
+        categoria_bruta=categoria_bruta,
+        descricao_bruta=descricao_bruta,
+        fabricante=fabricante,
+    )
+    usage["tokens"] += usage_fmt["tokens"]
+    usage["cache_creation"] += usage_fmt["cache_creation"]
+    usage["cache_read"] += usage_fmt["cache_read"]
+
+    data = {
+        "titulo": formatados.get("titulo") or produto_bruto.title(),
+        "marca": None,
+        "fabricante": fabricante,
+        "tipo_produto": tipo_cadastro,
+        "registro_ms": registro_ms,
+        "generico": eh_generico,
+        "tarja": tarja,
+        "principios_ativos": principios_ativos,
+        "descricao_curta": formatados.get("descricao_curta"),
+        "frase_obrigatoria": None,
+        "departamento": categoria_mapeada["departamento"] if categoria_mapeada else formatados.get("departamento"),
+        "categoria": categoria_mapeada["categoria"] if categoria_mapeada else formatados.get("categoria"),
+        "subcategoria": categoria_mapeada["subcategoria"] if categoria_mapeada else formatados.get("subcategoria"),
+        "categoria_id": categoria_mapeada["categoria_id"] if categoria_mapeada else None,
+        "origem_categorizacao": "mapeamento_tarjado" if categoria_mapeada else "ia",
+        # base não tem coluna de imagem - crawler só preenche foto de
+        # não-medicamento, mesma regra de negócio da IQVIA.
+        "imagem_url": None if eh_medicamento_final else resultado_crawler.get("image1"),
+        "pagina_produto_url": pagina_produto_url,
+        "origem_enriquecimento": ORIGEM_TARJADOS,
+        "origem_referencia": ean,
+        "confirmado_anvisa_cmed": False,
+        "tarja_confirmada_bulario": tarja_confirmada_bulario,
+    }
+
+    # validar_categorizacao (dentro de apply_safety_checks) zera departamento/
+    # categoria/subcategoria se a combinação não existir na árvore oficial -
+    # rede de segurança contra a classificação acima ter errado
+    data = ep.apply_safety_checks(data, ean)
+    data["modelo"] = model
+
+    # tarja de medicamento ainda não confirmada (nem crawler) - última
+    # tentativa via busca dedicada, mesma função e mesmo critério do fluxo
+    # ABCFarma/IQVIA. Roda DEPOIS de apply_safety_checks de propósito (mesma
+    # ordem dos outros caminhos).
+    if eh_medicamento_final and verify_tarja and not data.get("tarja"):
+        resultado_verif, usage_verif = ep.verify_tarja_registro(
+            client, model, ean, data.get("titulo"), data.get("marca"), principios_ativos
+        )
+        usage["tokens"] += usage_verif["tokens"]
+        usage["cache_creation"] += usage_verif["cache_creation"]
+        usage["cache_read"] += usage_verif["cache_read"]
+
+        if resultado_verif and resultado_verif.get("confirmado"):
+            tarja_verificada = resultado_verif.get("tarja")
+            if tarja_verificada is not None and tarja_verificada not in ep.ALLOWED_TARJA:
+                print(
+                    f"  [aviso] verificação dedicada devolveu tarja fora do "
+                    f"vocabulário para EAN {ean} ({tarja_verificada!r}) - zerada."
+                )
+                tarja_verificada = None
+            data["tarja"] = tarja_verificada
+            if not data.get("registro_ms"):
+                data["registro_ms"] = resultado_verif.get("registro_ms")
+            data["frase_obrigatoria"] = ep.compor_frase_obrigatoria(data, tarja_verificada, True)
+
+    data = ep.marcar_validacao_humana(data)
+    if tipo_ambiguo:
+        # sobrescreve DEPOIS de marcar_validacao_humana - não-medicamento
+        # nunca entra na fila por regra geral, mas esse caso específico
+        # precisa de revisão mesmo assim (ver docstring acima)
+        data["precisa_validacao_humana"] = True
+        data["mensagem_validacao_humana"] = ep.MENSAGEM_VALIDACAO_TARJADOS_TIPO_AMBIGUO
+    return data, usage
+
+
 def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
     """
     Traduz o resultado do catálogo IQVIA (iqvia.py) pro schema da planilha -
@@ -980,6 +1165,19 @@ def worker(ean, nome_produto, args):
         _avisar(args, "formatacao", "Formatando dados da ABCFarma")
         data, usage = mapear_abcfarma_para_schema(
             medicamento_abcfarma,
+            ean,
+            CLIENT,
+            args.model,
+            verify_tarja=not args.sem_verificar_tarja,
+        )
+        return ean, nome_produto, data, usage
+
+    _avisar(args, "tarjados", "Consultando base de Tarjados")
+    item_tarjado = tarjados.buscar_produto_tarjado(ean)
+    if item_tarjado is not None:
+        _avisar(args, "formatacao", "Formatando dados da base de Tarjados")
+        data, usage = mapear_tarjados_para_schema(
+            item_tarjado,
             ean,
             CLIENT,
             args.model,

@@ -36,10 +36,12 @@ FASE_NAO_LOCALIZADO = "nao_localizado"
 
 ORIGEM_CAT_IQVIA = "mapeamento_iqvia"
 ORIGEM_CAT_CMED = "mapeamento_cmed"
+ORIGEM_CAT_TARJADO = "mapeamento_tarjado"
 ORIGEM_CAT_IA = "ia"
 
 ORIGEM_ANVISA_CMED = "anvisa_cmed"
 ORIGEM_ABCFARMA = "abcfarma"
+ORIGEM_TARJADOS = "tarjados"
 ORIGEM_IQVIA = "iqvia"
 ORIGEM_CRAWLER = "crawler"
 ORIGEM_CLAUDE = "claude"
@@ -47,6 +49,7 @@ ORIGEM_CLAUDE = "claude"
 ORIGENS_ENRIQUECIMENTO = {
     ORIGEM_ANVISA_CMED: "ANVISA/CMED",
     ORIGEM_ABCFARMA: "ABCFarma",
+    ORIGEM_TARJADOS: "Base de Tarjados",
     ORIGEM_IQVIA: "IQVIA",
     ORIGEM_CRAWLER: "Crawler",
     ORIGEM_CLAUDE: "Claude",

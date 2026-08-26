@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 FaseProduto = Literal["pendente", "concluido", "nao_localizado"]
 TipoProduto = Literal["medicamento", "nao_medicamento"]
 Tarja = Literal["sem_tarja", "vermelha", "preta", "nao_aplicavel"]
-OrigemCategorizacao = Literal["mapeamento_iqvia", "mapeamento_cmed", "ia"]
-OrigemEnriquecimento = Literal["anvisa_cmed", "abcfarma", "iqvia", "crawler", "claude"]
+OrigemCategorizacao = Literal["mapeamento_iqvia", "mapeamento_cmed", "mapeamento_tarjado", "ia"]
+OrigemEnriquecimento = Literal["anvisa_cmed", "abcfarma", "tarjados", "iqvia", "crawler", "claude"]
 
 
 class CadastroProduto(BaseModel):

@@ -37,6 +37,7 @@ class FontesEan(BaseModel):
     ean: str
     cmed: Optional[dict[str, Any]] = None
     abcfarma: Optional[dict[str, Any]] = None
+    tarjados: Optional[dict[str, Any]] = None
     iqvia: Optional[dict[str, Any]] = None
 
 
