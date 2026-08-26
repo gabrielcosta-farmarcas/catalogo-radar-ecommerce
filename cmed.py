@@ -99,10 +99,10 @@ def buscar_medicamento_anvisa(ean):
 def buscar_categoria_mapeada(categoria_bruta):
     """
     Consulta mapeamento_categoria_cmed (ver mapear_categorias_cmed.py) por
-    uma categoria_bruta já revisada por humano. Retorna
+    uma categoria já revisada por humano. Retorna
     {"categoria_id", "departamento", "categoria", "subcategoria"} (id e
     textos None se a revisão confirmou que nenhuma folha da árvore se
-    aplica) ou None se a categoria_bruta não existir / ainda não tiver sido
+    aplica) ou None se a categoria não existir / ainda não tiver sido
     revisada - nesse caso o chamador cai no fluxo de IA.
     """
     if not categoria_bruta:
@@ -114,7 +114,7 @@ def buscar_categoria_mapeada(categoria_bruta):
                 SELECT m.categoria_id, c.departamento, c.categoria, c.subcategoria
                 FROM mapeamento_categoria_cmed m
                 LEFT JOIN categorias c ON c.id = m.categoria_id
-                WHERE m.categoria_bruta = %s AND m.revisado = true
+                WHERE m.categoria = %s AND m.revisado = true
                 """,
                 (categoria_bruta,),
             )

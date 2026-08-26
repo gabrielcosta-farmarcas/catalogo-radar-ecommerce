@@ -1,5 +1,5 @@
 """
-Classifica cada `categoria_bruta` DISTINTA da CMED (classe_terapeutica, com
+Classifica cada `categoria` DISTINTA da CMED (classe_terapeutica, com
 sufixo "(tipo_produto CMED: Fitoterápico)" quando aplicável - mesma
 derivação já usada em mapear_cmed_para_schema, ver enrich_com_crawler.py)
 na árvore oficial de categorização, uma vez por combinação - mesmo raciocínio
@@ -48,14 +48,14 @@ _carregar_dotenv()
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS mapeamento_categoria_cmed (
-    id               BIGSERIAL PRIMARY KEY,
-    categoria_bruta  TEXT NOT NULL,
-    categoria_id     BIGINT REFERENCES categorias(id),
-    revisado         BOOLEAN NOT NULL DEFAULT false,
-    criado_em        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    atualizado_em    TIMESTAMPTZ NOT NULL DEFAULT now()
+    id             BIGSERIAL PRIMARY KEY,
+    categoria      TEXT NOT NULL,
+    categoria_id   BIGINT REFERENCES categorias(id),
+    revisado       BOOLEAN NOT NULL DEFAULT false,
+    criado_em      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    atualizado_em  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE UNIQUE INDEX IF NOT EXISTS mapeamento_categoria_cmed_chave ON mapeamento_categoria_cmed (categoria_bruta);
+CREATE UNIQUE INDEX IF NOT EXISTS mapeamento_categoria_cmed_chave ON mapeamento_categoria_cmed (categoria);
 """
 
 
@@ -191,9 +191,9 @@ def popular(model="claude-haiku-4-5-20251001", tamanho_lote=25):
                     cur.execute(
                         """
                         INSERT INTO mapeamento_categoria_cmed
-                            (categoria_bruta, categoria_id)
+                            (categoria, categoria_id)
                         VALUES (%s, %s)
-                        ON CONFLICT (categoria_bruta)
+                        ON CONFLICT (categoria)
                         DO UPDATE SET categoria_id = EXCLUDED.categoria_id,
                                       revisado = false,
                                       atualizado_em = now()
