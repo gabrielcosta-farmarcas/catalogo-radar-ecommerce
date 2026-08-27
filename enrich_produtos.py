@@ -1468,7 +1468,10 @@ def _baixar_imagem(image_url, max_bytes=IMAGEM_MAX_BYTES, timeout=10):
                         return None, f"imagem maior que o teto de {max_bytes} bytes"
             return bytes(chunks), None
         return None, f"mais de {IMAGEM_REDIRECTS_MAX} redirects"
-    except (httpx.HTTPError, OSError, ValueError) as exc:
+    except (httpx.HTTPError, httpx.InvalidURL, OSError, ValueError) as exc:
+        # InvalidURL (ex: caractere não-imprimível tipo '\t' vindo sujo do
+        # site raspado) não herda de HTTPError - sem essa checagem em separado
+        # ela derrubava o worker inteiro em vez de só descartar essa imagem.
         return None, f"não foi possível baixar a imagem ({exc})"
 
 

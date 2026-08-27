@@ -354,6 +354,74 @@
     .cat-row { cursor: default; }
     .cat-row:hover { background: #f8faff; }
 
+    /* pipeline (tela "Como funciona") */
+    .intro-panel {
+      background: var(--card); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow);
+      margin-bottom: 20px;
+    }
+    .intro-panel p { margin: 0; color: var(--text); }
+    .intro-panel p + p { margin-top: 8px; color: var(--muted); }
+
+    .section-title { display: flex; align-items: center; gap: 10px; margin: 28px 0 14px; }
+    .section-title h2 { margin: 0; font-size: 16px; color: var(--navy); }
+    .section-title .step-badge {
+      width: 26px; height: 26px; border-radius: 50%; background: var(--navy); color: #fff;
+      display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0;
+    }
+
+    .pipeline {
+      display: flex; align-items: stretch; gap: 4px; flex-wrap: nowrap;
+      overflow-x: auto; padding-bottom: 6px; margin-bottom: 8px;
+    }
+    .pipe-step {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 16px; width: 220px; flex-shrink: 0;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .pipe-step .pipe-num {
+      width: 24px; height: 24px; border-radius: 50%; background: var(--blue-soft); color: var(--blue);
+      display: grid; place-items: center; font-size: 12px; font-weight: 700;
+    }
+    .pipe-step h4 { margin: 0; font-size: 14px; color: var(--navy); }
+    .pipe-step p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+    .pipe-badge {
+      display: inline-flex; align-self: flex-start; border-radius: 999px; padding: 3px 10px;
+      font-size: 11px; font-weight: 700;
+    }
+    .pipe-arrow {
+      display: flex; align-items: center; justify-content: center;
+      color: var(--line); font-size: 22px; flex-shrink: 0; width: 20px;
+    }
+    .pipe-note {
+      display: flex; gap: 10px; align-items: flex-start; color: var(--muted); font-size: 12px;
+      padding: 12px 4px 0;
+    }
+    .pipe-note svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; color: var(--blue); }
+
+    .pillars { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .pillar {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 18px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px;
+    }
+    .pillar-icon {
+      width: 38px; height: 38px; border-radius: 10px; background: var(--ok-bg); color: var(--ok);
+      display: grid; place-items: center; flex-shrink: 0;
+    }
+    .pillar-icon svg { width: 20px; height: 20px; }
+    .pillar h4 { margin: 0; font-size: 14px; color: var(--navy); }
+    .pillar p { margin: 0; font-size: 12.5px; color: var(--muted); line-height: 1.55; }
+
+    @media (max-width: 1100px) {
+      .pillars { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .pillars { grid-template-columns: 1fr; }
+      .pipeline { flex-direction: column; }
+      .pipe-step { width: 100%; }
+      .pipe-arrow { transform: rotate(90deg); align-self: center; }
+    }
+
     @media (min-width: 1400px) {
       .detail { grid-template-columns: 320px 1fr; }
     }
@@ -450,6 +518,10 @@
         <button data-go="fontes">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3"/><path d="M5 5v14c0 1.7 3.1 3 7 3s7-1.3 7-3V5"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>
           <span class="label">Fontes</span>
+        </button>
+        <button data-go="pipeline">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>
+          <span class="label">Como funciona</span>
         </button>
       </nav>
       <div class="utils">
@@ -690,6 +762,7 @@
             <ul class="steps" id="jobSteps">
               <li>CMED</li>
               <li>ABCFarma</li>
+              <li>Base de Tarjados</li>
               <li>IQVIA</li>
               <li>Crawler nas farmácias</li>
               <li>Claude formata o cadastro</li>
@@ -744,7 +817,7 @@
         <div class="page-head">
           <div>
             <h1>Fontes oficiais</h1>
-            <p class="sub">Consulta CMED, ABCFarma e IQVIA sem gastar token.</p>
+            <p class="sub">Consulta CMED, ABCFarma, Base de Tarjados e IQVIA sem gastar token.</p>
           </div>
         </div>
         <div class="job">
@@ -759,8 +832,111 @@
             <div class="grid2" id="fontesResult">
               <div class="cell"><span class="lbl">CMED</span><div class="val">Encontrado</div>tarja e registro MS</div>
               <div class="cell"><span class="lbl">ABCFarma</span><div class="val">Encontrado</div></div>
-              <div class="cell wide"><span class="lbl">IQVIA</span><div class="val">—</div>sem cobertura para este EAN</div>
+              <div class="cell"><span class="lbl">Base de Tarjados</span><div class="val">—</div>não consultada (CMED já resolveu)</div>
+              <div class="cell"><span class="lbl">IQVIA</span><div class="val">—</div>sem cobertura para este EAN</div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="pipeline" class="screen hidden">
+        <div class="page-head">
+          <div>
+            <h1>Como funciona o enriquecimento</h1>
+            <p class="sub">Da fonte oficial até a validação humana — nunca um cadastro publicado "no achismo".</p>
+          </div>
+        </div>
+
+        <div class="intro-panel">
+          <p>Cada produto passa por uma cadeia de fontes, da mais confiável e barata para a mais cara. Assim que uma fonte confirma os dados com segurança, o processo para ali — as próximas só entram em ação se a anterior não resolveu.</p>
+          <p>O resultado final passa ainda por regras automáticas de segurança e, quando alguma informação não está 100% confirmada, o produto fica reservado numa fila de revisão humana antes de ir para o e-commerce.</p>
+        </div>
+
+        <div class="section-title">
+          <span class="step-badge">1</span>
+          <h2>A cadeia de fontes, em ordem de confiança</h2>
+        </div>
+        <div class="pipeline" role="list" aria-label="Ordem das fontes consultadas">
+          <div class="pipe-step" role="listitem">
+            <div class="pipe-num">1</div>
+            <span class="pipe-badge ok">Fonte oficial do governo</span>
+            <h4>CMED / ANVISA</h4>
+            <p>Se o EAN está nessa base oficial, é medicamento confirmado — tarja e registro MS vêm direto da fonte, sem precisar de busca nenhuma.</p>
+          </div>
+          <div class="pipe-arrow" aria-hidden="true">›</div>
+          <div class="pipe-step" role="listitem">
+            <div class="pipe-num">2</div>
+            <span class="pipe-badge ok">Fonte oficial do governo</span>
+            <h4>ABCFarma</h4>
+            <p>Segunda base oficial. Confirma que é medicamento de verdade, mas não traz a tarja — por isso ela ainda passa por confirmação abaixo.</p>
+          </div>
+          <div class="pipe-arrow" aria-hidden="true">›</div>
+          <div class="pipe-step" role="listitem">
+            <div class="pipe-num">3</div>
+            <span class="pipe-badge neutral">Curadoria do nosso time</span>
+            <h4>Base de Tarjados</h4>
+            <p>Lista de medicamentos controlados mantida e atualizada todo dia pelo próprio time regulatório da empresa.</p>
+          </div>
+          <div class="pipe-arrow" aria-hidden="true">›</div>
+          <div class="pipe-step" role="listitem">
+            <div class="pipe-num">4</div>
+            <span class="pipe-badge neutral">Parceiro comercial</span>
+            <h4>IQVIA</h4>
+            <p>Catálogo de um parceiro do setor. É a única fonte que também cobre produtos que não são medicamento (cosmético, alimento etc.).</p>
+          </div>
+          <div class="pipe-arrow" aria-hidden="true">›</div>
+          <div class="pipe-step" role="listitem">
+            <div class="pipe-num">5</div>
+            <span class="pipe-badge warn">Busca gratuita</span>
+            <h4>Farmácias online</h4>
+            <p>Consulta o site de farmácias conhecidas e o bulário oficial, sem gastar nenhum crédito de inteligência artificial.</p>
+          </div>
+          <div class="pipe-arrow" aria-hidden="true">›</div>
+          <div class="pipe-step" role="listitem">
+            <div class="pipe-num">6</div>
+            <span class="pipe-badge warn">Só em último caso</span>
+            <h4>Inteligência artificial</h4>
+            <p>Só é usada quando nenhuma fonte acima resolveu — faz uma busca ampla na internet e cita a página onde encontrou cada dado.</p>
+          </div>
+        </div>
+
+        <p class="pipe-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
+          Na prática, a grande maioria dos produtos já é resolvida nas 4 primeiras camadas — fontes oficiais ou parceiras, sem precisar de inteligência artificial nem revisão manual.
+        </p>
+
+        <div class="section-title">
+          <span class="step-badge">2</span>
+          <h2>Camadas de segurança antes de publicar</h2>
+        </div>
+        <div class="pillars">
+          <div class="pillar">
+            <div class="pillar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z"/><path d="M9.5 12l2 2 3.5-3.5"/></svg>
+            </div>
+            <h4>Tarja nunca é "achismo"</h4>
+            <p>A cor da tarja só é aceita se vier de uma fonte oficial (ANVISA, bulário) ou de uma verificação dedicada — nunca por inferência do tipo "parece com outro remédio da mesma classe".</p>
+          </div>
+          <div class="pillar">
+            <div class="pillar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8"/></svg>
+            </div>
+            <h4>Regras automáticas corrigem antes de salvar</h4>
+            <p>Um conjunto de verificações automáticas revisa cada cadastro e corrige ou zera qualquer dado sem fonte confirmada — mesmo que a inteligência artificial tenha sugerido algo diferente.</p>
+          </div>
+          <div class="pillar">
+            <div class="pillar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+            <h4>Fila de validação humana</h4>
+            <p>Qualquer produto sem 100% de certeza — tarja não confirmada, ou achado só na internet — fica reservado até um responsável revisar, antes de ir para o e-commerce.</p>
+          </div>
+          <div class="pillar">
+            <div class="pillar-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 12h6M9 16h6M9 8h2"/><path d="M7 3h7l4 4v14H7z"/></svg>
+            </div>
+            <h4>Rastreabilidade total</h4>
+            <p>Cada produto grava exatamente de qual fonte veio cada dado e mantém o histórico de todas as versões — dá para auditar qualquer cadastro a qualquer momento.</p>
           </div>
         </div>
       </section>

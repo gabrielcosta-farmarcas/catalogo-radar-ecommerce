@@ -826,11 +826,11 @@ def mapear_tarjados_para_schema(item, ean, client, model, verify_tarja=True):
             )
         registro_ms = resultado_crawler.get("ms_register")
     else:
-        # não-medicamento - crawler só pra texto de descrição, mesmo corte
-        # leve da CMED/IQVIA (nunca a varredura completa das 9 farmácias)
-        resultado_crawler, _fontes_crawler = buscar_no_crawler(
-            ean, parar_quando=lambda _r, _f: True
-        )
+        # não-medicamento - critério padrão (eh_confiavel): Sara primeiro,
+        # varre as 9 farmácias se a primeira rodada não fechar o cadastro -
+        # precisa disso pra ter chance real de achar imagem, já que Sara
+        # (bulário de medicamento) nunca cobre não-medicamento sozinho.
+        resultado_crawler, _fontes_crawler = buscar_no_crawler(ean)
 
     descricao_bruta = (
         resultado_crawler.get("description") or resultado_crawler.get("short_description")
@@ -1007,11 +1007,11 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
             )
         registro_ms = resultado_crawler.get("ms_register")
     else:
-        # não-medicamento - crawler só pra texto de descrição, mesmo corte
-        # leve da CMED (nunca a varredura completa das 9 farmácias)
-        resultado_crawler, _fontes_crawler = buscar_no_crawler(
-            ean, parar_quando=lambda _r, _f: True
-        )
+        # não-medicamento - critério padrão (eh_confiavel): Sara primeiro,
+        # varre as 9 farmácias se a primeira rodada não fechar o cadastro -
+        # precisa disso pra ter chance real de achar imagem, já que Sara
+        # (bulário de medicamento) nunca cobre não-medicamento sozinho.
+        resultado_crawler, _fontes_crawler = buscar_no_crawler(ean)
 
     descricao_bruta = (
         resultado_crawler.get("description") or resultado_crawler.get("short_description")
@@ -1337,7 +1337,19 @@ def main():
                 for ean, nome_produto in pendentes
             }
             for future in as_completed(futures):
-                ean, nome_produto, data, usage = future.result()
+                # exceção não tratada num único EAN (ex: httpx.InvalidURL de
+                # site raspado sujo) não pode derrubar o lote inteiro - loga
+                # e segue pros próximos; a linha fica como estava
+                # (normalmente "pendente") e é reprocessada na próxima
+                # execução, sem gravar nada inconsistente.
+                try:
+                    ean, nome_produto, data, usage = future.result()
+                except Exception as exc:
+                    processed += 1
+                    ean_falho = futures[future]
+                    print(f"[{processed}/{total}] EAN {ean_falho} -> ERRO não tratado, pulando: {exc!r}")
+                    continue
+
                 ep.salvar_resultado(conn, ean, data, usage)
 
                 origem = ORIGEM_CLAUDE
