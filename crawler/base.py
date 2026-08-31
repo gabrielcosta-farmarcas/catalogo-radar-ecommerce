@@ -1,6 +1,8 @@
 import csv
 import os
 import re
+import threading
+import time
 import uuid
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor
@@ -11,6 +13,16 @@ import requests
 
 from .models import ProductResult
 from dominios import parse_tarja
+
+# intervalo mínimo (segundos) entre duas requisições HTTP ao MESMO site -
+# cada adapter é um singleton reusado em ADAPTERS_EM_ORDEM (ver
+# enrich_com_crawler.py), com sessão e lock compartilhados entre as threads
+# que processam EANs em paralelo, então isso serializa e espaça as chamadas
+# por site mesmo sob concorrência alta. Existe pra evitar bloqueio/anti-bot
+# por rajada de requisições (ver histórico: Drogasil/DrogaRaia retornando
+# vazio quando batidos em paralelo, funcionando isolado). Sobrescrevível via
+# env var pra debug/ajuste sem editar código.
+INTERVALO_MINIMO_ENTRE_CHAMADAS = float(os.environ.get("CRAWLER_SLEEP_SEGUNDOS", "1.5"))
 
 
 def normalizar_ean(valor):
@@ -51,17 +63,13 @@ def html_to_text(html):
     text = re.sub(r"\n{3,}", "\n\n", text)
     return text.strip()
 
+# Sem User-Agent de Chrome nem Client Hints (sec-ch-ua / sec-fetch-*).
+# Drogasil/Droga Raia (Akamai Bot Manager) devolvem 403 Access Denied quando
+# o pedido afirma ser Chrome e o TLS é Python/urllib3. Sem fingir navegador,
+# o python-requests padrão passa; Pacheco/Panvel não dependem desses headers.
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9,pt;q=0.8",
-    "sec-ch-ua": '"Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"',
-    "sec-ch-ua-mobile": "?0",
-    "sec-ch-ua-platform": '"macOS"',
-    "sec-fetch-dest": "document",
-    "sec-fetch-mode": "navigate",
-    "sec-fetch-site": "none",
-    "sec-fetch-user": "?1",
+    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
 }
 
 
@@ -115,8 +123,31 @@ class SiteAdapter(ABC):
         if not hasattr(self, "_sess"):
             s = requests.Session()
             s.headers.update(HEADERS)
+            self._sess_lock = threading.Lock()
+            self._ultima_chamada = 0.0
+            s.request = self._request_com_intervalo(s.request)
             self._sess = s
         return self._sess
+
+    def _request_com_intervalo(self, request_original):
+        """Envolve Session.request pra respeitar INTERVALO_MINIMO_ENTRE_CHAMADAS
+        entre chamadas consecutivas a este site - .get()/.post() do requests
+        chamam .request() por baixo, então isso cobre todo adapter sem
+        precisar mexer em cada um. O lock fica preso durante a requisição
+        inteira (não só o sleep), o que serializa as chamadas a este site
+        entre as threads que processam EANs em paralelo."""
+
+        def request_envolvida(*args, **kwargs):
+            with self._sess_lock:
+                espera = INTERVALO_MINIMO_ENTRE_CHAMADAS - (time.monotonic() - self._ultima_chamada)
+                if espera > 0:
+                    time.sleep(espera)
+                try:
+                    return request_original(*args, **kwargs)
+                finally:
+                    self._ultima_chamada = time.monotonic()
+
+        return request_envolvida
 
     def _session_with_tokens(self):
         s = self._session()

@@ -37,6 +37,7 @@ from PIL import Image, UnidentifiedImageError
 
 import categorias
 import dominios
+import substancias_controladas
 from dominios import (
     ORIGEM_ABCFARMA,
     ORIGEM_ANVISA_CMED,
@@ -46,6 +47,7 @@ from dominios import (
     ORIGEM_TARJADOS,
     TARJA_NAO_APLICAVEL,
     TARJA_PRETA,
+    TARJA_SEM,
     TARJA_VERMELHA,
     TIPO_NAO_MEDICAMENTO,
     eh_medicamento,
@@ -1633,6 +1635,27 @@ def validar_categorizacao(data):
     )
 
 
+def resolver_retencao(tarja, principios_ativos):
+    """
+    Decide precisa_retencao_receita a partir da tarja já normalizada
+    (código de dominios.TARJAS) e dos princípios ativos. Mesma regra da
+    CMED, usada por qualquer origem - não inventa retenção sem tarja.
+
+    Preta → True. Sem tarja / não aplicável → False (não consulta a lista).
+    Ausente → None. Vermelha → cruza substancias_controladas (Portaria 344
+    / IN 360). Qualquer outro código → None.
+    """
+    if tarja == TARJA_PRETA:
+        return True
+    if tarja in (TARJA_SEM, TARJA_NAO_APLICAVEL):
+        return False
+    if tarja is None:
+        return None
+    if tarja == TARJA_VERMELHA:
+        return substancias_controladas.substancia_esta_controlada(principios_ativos)
+    return None
+
+
 def compor_frase_obrigatoria(data, tarja, is_medicamento):
     """
     Recompõe frase_obrigatoria de forma determinística a partir dos campos já
@@ -1646,7 +1669,7 @@ def compor_frase_obrigatoria(data, tarja, is_medicamento):
     a frase de prescrição pela variante com retenção quando for "Sim" - Tarja
     Preta sempre entra aqui (retenção é sempre exigida), e Tarja Vermelha
     entra quando a substância bate na tabela substancias_controladas (ver
-    enrich_com_crawler.mapear_cmed_para_schema).
+    resolver_retencao).
     """
     partes = []
     if eh_verdadeiro(data.get("precisa_retencao_receita")):
@@ -1746,12 +1769,14 @@ def apply_safety_checks(data, ean):
         data["tarja"] = tarja = None
 
     # retenção de receita - carimbada em código (não pelo modelo), mesma
-    # lógica determinística de frase_obrigatoria/imagem. Para origem CMED,
-    # mapear_cmed_para_schema já decidiu esse campo com a regra combinada
-    # com o time de negócio (Tarja Preta / Sem Tarja / "- (*)" / Tarja
-    # Vermelha cruzada com substancias_controladas) - não sobrescreve.
-    if not origem_e_cmed:
-        data["precisa_retencao_receita"] = tarja == TARJA_PRETA
+    # lógica determinística de frase_obrigatoria/imagem. Vale pra qualquer
+    # origem, inclusive CMED: Preta / Sem Tarja / ausente / Vermelha cruzada
+    # com substancias_controladas (ver resolver_retencao). Não-medicamento
+    # já foi carimbado acima e não entra aqui.
+    if is_medicamento:
+        data["precisa_retencao_receita"] = resolver_retencao(
+            tarja, data.get("principios_ativos")
+        )
 
     # medicamento nunca leva imagem no e-commerce (regra de negócio) -
     # qualquer tarja, inclusive Sem Tarja / não confirmada. Não-medicamento
@@ -2111,16 +2136,14 @@ def call_model(
                     data["tarja"] = None
                     data["registro_ms"] = None
 
-                # frase_obrigatoria depende da tarja - recompõe com o valor
-                # atualizado pela verificação dedicada
+                # retenção e frase dependem da tarja final - retenção
+                # primeiro, senão a frase usa o valor antigo
+                data["precisa_retencao_receita"] = resolver_retencao(
+                    data.get("tarja"), data.get("principios_ativos")
+                )
                 data["frase_obrigatoria"] = compor_frase_obrigatoria(
                     data, data.get("tarja"), True
                 )
-
-                # precisa_retencao_receita também depende da tarja - mesma
-                # lógica determinística de apply_safety_checks, recalculada
-                # aqui com o valor final pós-verificação dedicada
-                data["precisa_retencao_receita"] = data.get("tarja") == TARJA_PRETA
 
                 # medicamento nunca leva imagem - reforço depois da
                 # verificação de tarja, caso algum caminho ainda tenha

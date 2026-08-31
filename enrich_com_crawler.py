@@ -243,6 +243,10 @@ def _rodar_adapters(ean, adapters, max_workers):
     return brutos
 
 
+def _tem_descricao(resultado):
+    return bool(resultado.get("description") or resultado.get("short_description"))
+
+
 def buscar_no_crawler(
     ean,
     max_workers=len(ADAPTERS_EM_ORDEM),
@@ -258,6 +262,10 @@ def buscar_no_crawler(
     bulário já tinha registro_ms/tarja. parar_quando(resultado, fontes)
     default é eh_confiavel.
 
+    Quando o cadastro regulatório já fechou mas ainda não há texto de
+    e-commerce, tenta Drogasil/Raia e, se os dois vierem vazios, as
+    demais farmácias que extraem description (Pacheco, Panvel, etc.).
+
     Retorna (resultado: dict, fontes: list[str]) - resultado nunca é None,
     mas fica vazio se ninguém encontrar.
     """
@@ -268,12 +276,23 @@ def buscar_no_crawler(
     brutos = _rodar_adapters(ean, [sara], max_workers=1)
     resultado, fontes = _consolidar_resultados(ean, brutos)
     if parar_quando(resultado, fontes):
-        if resultado.get("description") or resultado.get("short_description"):
+        if _tem_descricao(resultado):
             return resultado, fontes
-        # bulário fecha o cadastro regulatório, mas não traz texto de
-        # e-commerce - 2 farmácias bastam pra descrição, sem varrer as 9
-        so_descricao = [a for a in demais if a.name in ("drogasil", "drogaraia")]
-        brutos.update(_rodar_adapters(ean, so_descricao, max_workers))
+        # Sara fecha o cadastro regulatório, mas não traz texto de
+        # e-commerce. Drogasil/Raia têm o melhor texto quando respondem;
+        # se os dois vierem vazios (hoje devolvem 403 Access Denied),
+        # cai nas outras farmácias que extraem description — sem isso
+        # todo produto CMED saía com descricao_curta=null.
+        so_rd = [a for a in demais if a.name in ("drogasil", "drogaraia")]
+        brutos.update(_rodar_adapters(ean, so_rd, max_workers))
+        resultado, fontes = _consolidar_resultados(ean, brutos)
+        if _tem_descricao(resultado):
+            return resultado, fontes
+        resto = [
+            a for a in demais
+            if a.name not in ("drogasil", "drogaraia", "araujo")
+        ]
+        brutos.update(_rodar_adapters(ean, resto, max_workers))
         return _consolidar_resultados(ean, brutos)
 
     brutos.update(_rodar_adapters(ean, demais, max_workers))
@@ -459,14 +478,7 @@ def _resolver_tarja_e_retencao_cmed(tarja_bruta, principios_ativos):
     Retorna (tarja, precisa_retencao_receita).
     """
     tarja_normalizada = cmed.TARJA_CMED_PARA_SCHEMA.get(tarja_bruta)
-    if tarja_normalizada == TARJA_PRETA:
-        return TARJA_PRETA, True
-    if tarja_normalizada == TARJA_SEM:
-        return TARJA_SEM, False
-    if tarja_normalizada is None:
-        return None, None
-    achou = substancias_controladas.substancia_esta_controlada(principios_ativos)
-    return TARJA_VERMELHA, achou
+    return tarja_normalizada, ep.resolver_retencao(tarja_normalizada, principios_ativos)
 
 
 def mapear_cmed_para_schema(medicamento, ean, client, model):
