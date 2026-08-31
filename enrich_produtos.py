@@ -339,6 +339,13 @@ def marcar_validacao_humana(data):
     so_iqvia = origem == ORIGEM_IQVIA
     so_crawler = origem == ORIGEM_CRAWLER
     medicamento = eh_medicamento(data)
+    # .get, não .pop: salvar_resultado chama marcar_validacao_humana de novo
+    # antes de gravar (revalidação defensiva), então essas chaves precisam
+    # sobreviver a mais de uma chamada - nunca vazam pro banco de qualquer
+    # forma, porque salvar_resultado/registrar_versao_historico só leem
+    # colunas explícitas de `data`, nunca o dict inteiro.
+    motivo_categoria_invalida = data.get("_categorizacao_invalida")
+    suspeita_suplemento_abcfarma = data.get("_suspeita_suplemento_abcfarma", False)
     tarja_bulario = eh_verdadeiro(data.get("tarja_confirmada_bulario"))
     tarja_mip_iqvia = eh_verdadeiro(data.get("tarja_confirmada_iqvia_mip"))
     if medicamento and so_web:
@@ -375,6 +382,42 @@ def marcar_validacao_humana(data):
     else:
         data[VALIDACAO_HUMANA_COLUMN] = False
         data[MENSAGEM_VALIDACAO_COLUMN] = None
+
+    # categorização zerada por validar_categorizacao (apply_safety_checks) -
+    # entra na fila mesmo quando a tarja já está confirmada (motivo
+    # independente), combinando com a mensagem de tarja se as duas se
+    # aplicarem. Só pra medicamento, mesma regra do restante da função -
+    # não-medicamento nunca entra na fila.
+    if medicamento and motivo_categoria_invalida:
+        mensagem_categoria = (
+            "VALIDAÇÃO HUMANA OBRIGATÓRIA: categorização não confere com a "
+            f"árvore oficial ({motivo_categoria_invalida}) - revisar "
+            "departamento/categoria/subcategoria antes de publicar no "
+            "e-commerce."
+        )
+        mensagem_atual = data.get(MENSAGEM_VALIDACAO_COLUMN)
+        data[VALIDACAO_HUMANA_COLUMN] = True
+        data[MENSAGEM_VALIDACAO_COLUMN] = (
+            f"{mensagem_atual} | {mensagem_categoria}" if mensagem_atual else mensagem_categoria
+        )
+
+    # ABCFarma com tipo_medicamento="OUTROS" e registro_ms vazio/RDC de
+    # suplemento (ver mapear_abcfarma_para_schema) - pode ser suplemento
+    # alimentar cadastrado como medicamento na fonte, não uma classificação
+    # confiável. Combina com as mensagens acima em vez de substituir.
+    if medicamento and suspeita_suplemento_abcfarma:
+        mensagem_suplemento = (
+            "VALIDAÇÃO HUMANA OBRIGATÓRIA: fonte ABCFarma classifica este "
+            "item como tipo_medicamento=\"OUTROS\" sem registro_ms de "
+            "medicamento (vazio ou citação de RDC de suplemento alimentar) - "
+            "confirmar se é medicamento de verdade ou suplemento alimentar "
+            "antes de publicar no e-commerce."
+        )
+        mensagem_atual = data.get(MENSAGEM_VALIDACAO_COLUMN)
+        data[VALIDACAO_HUMANA_COLUMN] = True
+        data[MENSAGEM_VALIDACAO_COLUMN] = (
+            f"{mensagem_atual} | {mensagem_suplemento}" if mensagem_atual else mensagem_suplemento
+        )
     return data
 
 
@@ -1761,6 +1804,10 @@ def apply_safety_checks(data, ean):
     if not categorizacao_ok:
         print(f"  [aviso] categorização inválida para EAN {ean} ({motivo_categorizacao}) - zerada.")
         categorias.aplicar_folha(data, None)
+        # sinaliza pra marcar_validacao_humana - sem isso o produto ficava
+        # sem categoria e sem nenhuma sinalização de revisão (só o print
+        # acima, perdido depois que o job termina).
+        data["_categorizacao_invalida"] = motivo_categorizacao
 
     # frase_obrigatoria: recompõe de forma determinística a partir dos campos
     # já validados acima em vez de confiar na composição livre do modelo, que

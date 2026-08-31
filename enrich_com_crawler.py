@@ -683,6 +683,20 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
     usage["cache_creation"] += usage_fmt["cache_creation"]
     usage["cache_read"] += usage_fmt["cache_read"]
 
+    # tipo_medicamento="OUTROS" (não Genérico/Similar/Referência) combinado
+    # com registro_ms vazio ou preenchido com uma citação de RDC de
+    # suplemento alimentar (ex: "RDC 27/2010"), em vez de um registro ANVISA
+    # de medicamento de verdade, é forte sinal de que a base ABCFarma
+    # cadastrou um suplemento alimentar sob o guarda-chuva de medicamento -
+    # "Suplementos Alimentares" só existe como nao_medicamento na árvore
+    # oficial (ver categorias.py), por isso esses casos nunca resolviam
+    # categoria_id. Não reclassifica sozinho (heurística, não certeza) - só
+    # força validação humana (ver ep.marcar_validacao_humana).
+    registro_ms_abcfarma = medicamento["registro_ms"]
+    suspeita_suplemento = medicamento["tipo_medicamento"] == "OUTROS" and (
+        not registro_ms_abcfarma or registro_ms_abcfarma.strip().upper().startswith("RDC")
+    )
+
     data = {
         "titulo": formatados.get("titulo") or descricao_produto.title(),
         "marca": marca,
@@ -706,6 +720,7 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
         "origem_referencia": medicamento["codigo_produto"],
         "confirmado_anvisa_cmed": False,
         "tarja_confirmada_bulario": tarja_confirmada_bulario,
+        "_suspeita_suplemento_abcfarma": suspeita_suplemento,
     }
 
     # validar_categorizacao (dentro de apply_safety_checks) zera departamento/
