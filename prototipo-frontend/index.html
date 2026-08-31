@@ -3,30 +3,31 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#FAFBFC" />
   <title>radar catálogo — protótipo</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --navy: #0b1b4a;
-      --blue: #2f6bff;
-      --blue-2: #4d84ff;
-      --blue-soft: #eef3ff;
-      --text: #1a2340;
-      --muted: #6b7390;
-      --line: #e6eaf4;
-      --bg: #f5f7fb;
+      --navy: #061938;
+      --blue: #0091ff;
+      --blue-2: #074AC6;
+      --blue-soft: #E4F2FF;
+      --text: #061938;
+      --muted: #7A869A;
+      --line: #E5E8EB;
+      --bg: #FAFBFC;
       --card: #fff;
-      --ok: #0f9d6e;
-      --ok-bg: #e8f8f1;
-      --warn: #c47a00;
-      --warn-bg: #fff6e5;
-      --danger: #d12b4a;
-      --danger-bg: #fde8ed;
-      --shadow: 0 8px 28px rgba(15, 35, 90, 0.06);
-      --radius: 14px;
-      --focus: 0 0 0 3px rgba(47, 107, 255, .35);
+      --ok: #588E1A;
+      --ok-bg: #F0FFD7;
+      --warn: #AB7A00;
+      --warn-bg: #FFE7A8;
+      --danger: #DF0028;
+      --danger-bg: #FFCFDA;
+      --shadow: 0 2px 6px rgba(80, 95, 121, .33);
+      --radius: 8px;
+      --focus: 0 0 0 3px rgba(0, 145, 255, .3);
       --fast: 140ms ease;
     }
     * { box-sizing: border-box; }
@@ -88,7 +89,7 @@
       width: 100%;
       border: 0;
       background: var(--blue-soft);
-      border-radius: 10px;
+      border-radius: 4px;
       padding: 14px 16px;
       outline: none;
       transition: box-shadow var(--fast);
@@ -98,19 +99,20 @@
       border: 1px solid var(--line);
       background: #fff;
       color: var(--text);
-      border-radius: 10px;
+      border-radius: 4px;
       padding: 10px 14px;
       display: inline-flex; align-items: center; gap: 8px;
+      font-weight: 500;
       transition: background var(--fast), border-color var(--fast), transform var(--fast);
     }
-    .btn:hover { border-color: #c9d8ff; background: var(--blue-soft); }
+    .btn:hover { border-color: #89C9FF; background: var(--blue-soft); }
     .btn:active { transform: translateY(1px); }
     .btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
     .btn.primary {
       background: var(--blue);
       border-color: var(--blue);
       color: #fff;
-      font-weight: 700;
+      font-weight: 500;
     }
     .btn.primary:hover { background: var(--blue-2); border-color: var(--blue-2); }
     .btn.full { width: 100%; padding: 14px; justify-content: center; }
@@ -149,8 +151,8 @@
     .nav { display: flex; flex-direction: column; gap: 4px; }
     .nav button {
       background: none; border: 0; color: var(--muted);
-      padding: 10px 12px; font-weight: 600;
-      border-radius: 10px; text-align: left;
+      padding: 10px 12px; font-weight: 500;
+      border-radius: 4px; text-align: left;
       display: flex; align-items: center; gap: 10px;
       transition: background var(--fast), color var(--fast);
     }
@@ -188,7 +190,7 @@
 
     .page { padding: 20px 28px 32px 20px; width: 100%; min-width: 0; max-width: none; }
     .page-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; margin-bottom: 18px; flex-wrap: wrap; }
-    h1 { margin: 0; font-size: 28px; color: var(--navy); }
+    h1 { margin: 0; font-size: 32px; line-height: 1.25; font-weight: 700; color: var(--navy); }
     .sub { color: var(--muted); margin: 6px 0 0; }
     .breadcrumb { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; margin: 0 0 6px; }
     .breadcrumb button { background: none; border: 0; color: var(--blue); padding: 0; font-weight: 600; }
@@ -202,9 +204,9 @@
       transition: border-color var(--fast), box-shadow var(--fast);
     }
     .kpi.click { cursor: pointer; }
-    .kpi.click:hover, .kpi.on { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(47,107,255,.12); }
+    .kpi.click:hover, .kpi.on { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(0,145,255,.15); }
     .kpi .k { color: var(--muted); font-size: 13px; }
-    .kpi .v { font-size: 28px; font-weight: 700; color: var(--navy); margin-top: 6px; }
+    .kpi .v { font-size: 28px; font-weight: 700; color: var(--navy); margin-top: 6px; font-variant-numeric: tabular-nums; }
     .kpi .s { font-size: 12px; color: var(--muted); margin-top: 4px; }
 
     .filters {
@@ -219,7 +221,7 @@
     .search {
       width: 100%;
       border: 1px solid var(--line); background: #fff;
-      border-radius: 10px; padding: 11px 14px 11px 38px;
+      border-radius: 4px; padding: 11px 14px 11px 38px;
       transition: box-shadow var(--fast), border-color var(--fast);
     }
     .search:focus { border-color: var(--blue); box-shadow: var(--focus); }
@@ -228,8 +230,8 @@
       border-radius: 999px; padding: 8px 12px; color: var(--muted);
       transition: background var(--fast), color var(--fast), border-color var(--fast);
     }
-    .chip:hover { border-color: #c9d8ff; }
-    .chip[aria-pressed="true"] { background: var(--blue-soft); color: var(--blue); border-color: #c9d8ff; font-weight: 600; }
+    .chip:hover { border-color: #89C9FF; }
+    .chip[aria-pressed="true"] { background: var(--blue-soft); color: var(--blue); border-color: #89C9FF; font-weight: 600; }
 
     .list {
       background: var(--card);
@@ -248,7 +250,7 @@
     .item .lbl { display: none; }
     .head {
       padding: 10px 18px;
-      background: #f8f9fd;
+      background: #F0F3F6;
       border-bottom: 1px solid var(--line);
       color: var(--muted);
       font-size: 11px;
@@ -263,9 +265,9 @@
       transition: background var(--fast);
     }
     .item:last-child { border-bottom: 0; }
-    .item:hover, .item:focus-visible { background: #f8faff; }
+    .item:hover, .item:focus-visible { background: #F0F3F6; }
     .thumb {
-      width: 48px; height: 48px; border-radius: 10px;
+      width: 48px; height: 48px; border-radius: 6px;
       background: var(--blue-soft); display: grid; place-items: center;
       color: var(--blue); font-size: 10px; font-weight: 700; text-align: center;
       overflow: hidden; flex-shrink: 0;
@@ -282,7 +284,7 @@
       border: 0; background: none; color: var(--blue); padding: 2px 6px 2px 6px; font-size: 12px;
       border-radius: 6px;
     }
-    .copy:hover { background: rgba(47,107,255,.1); }
+    .copy:hover { background: rgba(0,145,255,.1); }
     .pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
     .pill svg { width: 12px; height: 12px; flex-shrink: 0; }
     .ok { background: var(--ok-bg); color: var(--ok); }
@@ -296,8 +298,8 @@
     .empty-state p { margin: 0 0 12px; }
 
     .alert {
-      background: #fff8e8; border: 1px solid #f2d59a; color: #8a5a00;
-      border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;
+      background: var(--warn-bg); border: 1px solid #FFDB7E; color: var(--warn);
+      border-radius: 6px; padding: 12px 14px; margin-bottom: 14px;
       display: flex; gap: 10px; align-items: flex-start;
     }
     .alert svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
@@ -308,7 +310,7 @@
       border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow);
     }
     .photo {
-      height: 240px; border-radius: 12px; background: var(--blue-soft);
+      height: 240px; border-radius: 8px; background: var(--blue-soft);
       display: grid; place-items: center; color: var(--blue); font-weight: 700;
       flex-direction: column; gap: 8px;
     }
@@ -316,9 +318,9 @@
     .photo-name { font-size: 12px; font-weight: 400; color: var(--muted); margin-top: 4px; }
     .group { margin-top: 18px; }
     .group:first-of-type { margin-top: 0; }
-    .group h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+    .group h2, .group h3 { margin: 0 0 10px; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
     .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .cell { background: var(--bg); border-radius: 10px; padding: 10px 12px; }
+    .cell { background: #F0F3F6; border-radius: 6px; padding: 10px 12px; }
     .wide { grid-column: span 2; }
 
     .job {
@@ -334,7 +336,7 @@
     .job .field label { display: block; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
     .job .field input {
       width: 100%; border: 0; background: var(--blue-soft);
-      border-radius: 10px; padding: 14px 16px; outline: none;
+      border-radius: 4px; padding: 14px 16px; outline: none;
     }
     .job .field input:focus { box-shadow: var(--focus); }
     .job .field input:disabled { opacity: .6; }
@@ -346,13 +348,127 @@
     .steps li.done { color: var(--ok); }
     .steps li.done::before { background: var(--ok); }
     .steps li.now { color: var(--blue); font-weight: 700; }
-    .steps li.now::before { background: var(--blue); box-shadow: 0 0 0 4px rgba(47,107,255,.18); }
+    .steps li.now::before { background: var(--blue); box-shadow: 0 0 0 4px rgba(0,145,255,.2); }
 
-    .cat-head, .cat-row {
-      grid-template-columns: minmax(160px, 1fr) minmax(180px, 1.2fr) minmax(180px, 1.2fr) minmax(220px, 1.4fr);
+    /* admin: nav groups */
+    .nav { gap: 16px; }
+    .nav-group { display: flex; flex-direction: column; gap: 4px; }
+    .nav-label {
+      padding: 4px 12px 2px; font-size: 11px; font-weight: 700; letter-spacing: .04em;
+      text-transform: uppercase; color: var(--muted);
     }
-    .cat-row { cursor: default; }
-    .cat-row:hover { background: #f8faff; }
+    button, [role="button"] { touch-action: manipulation; }
+
+    /* admin: tabs */
+    .tablist { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 16px; flex-wrap: wrap; }
+    .tablist button {
+      background: none; border: 0; padding: 10px 14px; color: var(--muted); font-weight: 600;
+      border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color var(--fast), border-color var(--fast);
+    }
+    .tablist button:hover { color: var(--blue); }
+    .tablist button[aria-selected="true"] { color: var(--blue); border-bottom-color: var(--blue); }
+    .tabpanel.hidden { display: none; }
+
+    /* admin: toolbar + data rows */
+    .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; justify-content: space-between; }
+    .toolbar .search-wrap { flex: 1; min-width: 220px; }
+    .count-note { font-size: 12px; color: var(--muted); margin: 8px 2px 0; }
+    .data-row { padding: 12px 18px; border-bottom: 1px solid var(--line); }
+    .data-row:last-child { border-bottom: 0; }
+    .data-row:hover { background: #FAFBFC; }
+    .data-row > div { min-width: 0; overflow-wrap: break-word; }
+    .row-actions { display: flex; gap: 4px; justify-self: end; }
+    .icon-btn {
+      border: 1px solid var(--line); background: #fff; border-radius: 6px;
+      width: 30px; height: 30px; display: inline-grid; place-items: center; color: var(--muted); flex-shrink: 0;
+      transition: background var(--fast), color var(--fast), border-color var(--fast);
+    }
+    .icon-btn svg { width: 15px; height: 15px; }
+    .icon-btn:hover { border-color: #89C9FF; background: var(--blue-soft); color: var(--blue); }
+    .icon-btn.danger:hover { border-color: #FFB4C4; background: var(--danger-bg); color: var(--danger); }
+
+    /* admin: toggle switch */
+    .switch { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+    .switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+    .switch .track {
+      width: 34px; height: 20px; border-radius: 99px; background: var(--line); position: relative; flex-shrink: 0;
+      transition: background var(--fast);
+    }
+    .switch .track::after {
+      content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+      background: #fff; transition: transform var(--fast); box-shadow: 0 1px 2px rgba(0,0,0,.25);
+    }
+    .switch input:checked + .track { background: var(--ok); }
+    .switch input:checked + .track::after { transform: translateX(14px); }
+    .switch input:focus-visible + .track { box-shadow: var(--focus); }
+
+    /* admin: modals */
+    dialog#crudModal, dialog#confirmModal {
+      border: 0; border-radius: 12px; padding: 0; box-shadow: 0 20px 50px rgba(6,25,56,.25);
+      width: min(560px, calc(100vw - 32px)); max-height: min(88vh, 720px);
+      background: var(--card); color: var(--text);
+    }
+    dialog#confirmModal { width: min(420px, calc(100vw - 32px)); }
+    dialog::backdrop { background: rgba(6,25,56,.45); }
+    .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--line); }
+    .modal-head h2 { margin: 0; font-size: 17px; color: var(--navy); }
+    .modal-head p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+    .modal-close { border: 0; background: none; color: var(--muted); padding: 4px; border-radius: 8px; flex-shrink: 0; }
+    .modal-close:hover { color: var(--danger); background: var(--danger-bg); }
+    .modal-body { padding: 18px 20px; overflow: auto; max-height: 55vh; overscroll-behavior: contain; }
+    .modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--line); }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-grid .field { margin-bottom: 0; }
+    .form-grid .field.wide { grid-column: 1 / -1; }
+    .field select {
+      width: 100%; border: 0; background: var(--blue-soft); border-radius: 4px; padding: 14px 16px; outline: none;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237A869A' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center; background-size: 16px;
+    }
+    .field select:focus { box-shadow: var(--focus); }
+    .field textarea {
+      width: 100%; border: 0; background: var(--blue-soft); border-radius: 4px; padding: 12px 14px; outline: none;
+      font: inherit; resize: vertical; min-height: 64px;
+    }
+    .field textarea:focus { box-shadow: var(--focus); }
+    .field .checkbox-row { display: flex; align-items: center; gap: 10px; }
+    @media (max-width: 640px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+
+    /* admin: editor de prompts */
+    .prompt-layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: start; }
+    .prompt-list {
+      display: flex; flex-direction: column; gap: 6px;
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 10px; box-shadow: var(--shadow);
+    }
+    .prompt-item {
+      display: flex; flex-direction: column; gap: 2px; text-align: left;
+      padding: 10px 12px; border-radius: 6px; border: 1px solid transparent; background: none;
+      transition: background var(--fast), border-color var(--fast);
+    }
+    .prompt-item:hover { background: var(--blue-soft); }
+    .prompt-item[aria-current="true"] { background: var(--blue-soft); border-color: #89C9FF; }
+    .prompt-item-label { font-weight: 600; color: var(--navy); font-size: 13px; }
+    .prompt-item-meta { font-size: 11px; color: var(--muted); }
+    .prompt-editor {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      padding: 18px; box-shadow: var(--shadow); min-width: 0;
+    }
+    .prompt-editor-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+    .prompt-editor-head h2 { margin: 0; font-size: 16px; color: var(--navy); }
+    .prompt-editor-head p { margin: 4px 0 0; }
+    .prompt-textarea {
+      width: 100%; height: 75vh; min-height: 640px; max-height: 1100px; border: 0; background: var(--blue-soft); border-radius: 6px;
+      padding: 16px 18px; outline: none; resize: vertical;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13.5px; line-height: 1.7;
+    }
+    .prompt-textarea:focus { box-shadow: var(--focus); }
+    @media (max-width: 900px) {
+      .prompt-layout { grid-template-columns: 1fr; }
+    }
 
     /* pipeline (tela "Como funciona") */
     .intro-panel {
@@ -405,7 +521,7 @@
       padding: 18px; box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px;
     }
     .pillar-icon {
-      width: 38px; height: 38px; border-radius: 10px; background: var(--ok-bg); color: var(--ok);
+      width: 38px; height: 38px; border-radius: 6px; background: var(--ok-bg); color: var(--ok);
       display: grid; place-items: center; flex-shrink: 0;
     }
     .pillar-icon svg { width: 20px; height: 20px; }
@@ -441,15 +557,13 @@
       }
       .side.open { transform: translateX(0); }
       .overlay {
-        display: block; position: fixed; inset: 0; background: rgba(11,27,74,.35);
+        display: block; position: fixed; inset: 0; background: rgba(6,25,56,.35);
         z-index: 90; opacity: 0; pointer-events: none; transition: opacity 220ms ease;
       }
       .overlay.show { opacity: 1; pointer-events: auto; }
       .kpis, .detail, .grid2, .job { grid-template-columns: 1fr; }
       .item, .head { grid-template-columns: 56px 1fr 36px; }
       .item > :nth-child(n+3):not(.chev), .head > :nth-child(n+3):not(:last-child) { display: none; }
-      .cat-head, .cat-row { grid-template-columns: 1fr 1fr; }
-      .cat-row > :nth-child(n+3), .cat-head > :nth-child(n+3) { display: none; }
       .wide { grid-column: auto; }
     }
 
@@ -498,31 +612,56 @@
         </button>
       </div>
       <nav class="nav" aria-label="Navegação principal">
-        <button aria-current="page" data-go="fila">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h11"/></svg>
-          <span class="label">Fila</span>
-        </button>
-        <button data-go="validacao">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z"/><path d="M9.5 12l2 2 3.5-3.5"/></svg>
-          <span class="label">Validação</span>
-          <span class="count">12</span>
-        </button>
-        <button data-go="enriquecer">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>
-          <span class="label">Enriquecer</span>
-        </button>
-        <button data-go="categorias">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h6l1.5 2H20v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/></svg>
-          <span class="label">Categorias</span>
-        </button>
-        <button data-go="fontes">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3"/><path d="M5 5v14c0 1.7 3.1 3 7 3s7-1.3 7-3V5"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>
-          <span class="label">Fontes</span>
-        </button>
-        <button data-go="pipeline">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>
-          <span class="label">Como funciona</span>
-        </button>
+        <div class="nav-group">
+          <span class="nav-label">Operação</span>
+          <button aria-current="page" data-go="fila">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h11"/></svg>
+            <span class="label">Fila</span>
+          </button>
+          <button data-go="validacao">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z"/><path d="M9.5 12l2 2 3.5-3.5"/></svg>
+            <span class="label">Validação</span>
+            <span class="count">12</span>
+          </button>
+          <button data-go="enriquecer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg>
+            <span class="label">Enriquecer</span>
+          </button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-label">Administração</span>
+          <button data-go="categorias">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h6l1.5 2H20v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/></svg>
+            <span class="label">Categorias</span>
+          </button>
+          <button data-go="mapeamentos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>
+            <span class="label">Mapeamentos</span>
+          </button>
+          <button data-go="bases">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/></svg>
+            <span class="label">Bases de dados</span>
+          </button>
+          <button data-go="config">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.6V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.6 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.6 1Z"/></svg>
+            <span class="label">Configurações</span>
+          </button>
+          <button data-go="prompts">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 9h8M8 13h5"/><path d="M21 12c0 4-3.6 7-9 7-1 0-1.9-.1-2.8-.3L4 20l1-3.8C3.7 14.9 3 13.5 3 12c0-4 3.6-7 9-7s9 3 9 7Z"/></svg>
+            <span class="label">Prompts</span>
+          </button>
+        </div>
+        <div class="nav-group">
+          <span class="nav-label">Referência</span>
+          <button data-go="fontes">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="7" ry="3"/><path d="M5 5v14c0 1.7 3.1 3 7 3s7-1.3 7-3V5"/><path d="M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>
+            <span class="label">Fontes</span>
+          </button>
+          <button data-go="pipeline">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>
+            <span class="label">Como funciona</span>
+          </button>
+        </div>
       </nav>
       <div class="utils">
         <div class="avatar" aria-hidden="true">GC</div>
@@ -775,41 +914,209 @@
       <section id="categorias" class="screen hidden">
         <div class="page-head">
           <div>
-            <h1>Árvore oficial</h1>
-            <p class="sub">O cadastro só pode usar combinações desta lista.</p>
+            <h1>Árvore oficial de categorias</h1>
+            <p class="sub">O cadastro só pode usar combinações desta lista. Crie, edite ou desative categorias abaixo.</p>
+          </div>
+          <div class="actions">
+            <button class="btn primary" type="button" data-new-table="categorias">+ Nova categoria</button>
           </div>
         </div>
-        <div class="list">
-          <div class="cols head cat-head">
-            <span>Tipo</span>
-            <span>Departamento</span>
-            <span>Categoria</span>
-            <span>Subcategoria</span>
+        <div class="toolbar">
+          <div class="search-wrap">
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+            <input class="search" type="search" placeholder="Buscar departamento, categoria…" aria-label="Buscar categoria" data-table-search="categorias" />
           </div>
-          <div class="cols item cat-row">
-            <div><span class="pill danger">Medicamento</span></div>
-            <div>Dor e febre</div>
-            <div>Analgésicos</div>
-            <div>Dipirona</div>
+        </div>
+        <div class="list" data-table-list="categorias">
+          <div class="cols head"></div>
+          <div class="rows"></div>
+          <div class="empty-state hidden">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+            <p>Nenhuma categoria encontrada para essa busca.</p>
           </div>
-          <div class="cols item cat-row">
-            <div><span class="pill danger">Medicamento</span></div>
-            <div>Gripe e resfriado</div>
-            <div>Antigripais</div>
-            <div>—</div>
+        </div>
+        <p class="count-note"></p>
+      </section>
+
+      <section id="mapeamentos" class="screen hidden">
+        <div class="page-head">
+          <div>
+            <h1>Mapeamentos de categoria</h1>
+            <p class="sub">De-para entre a classificação de cada fonte externa e a categoria oficial do catálogo.</p>
           </div>
-          <div class="cols item cat-row">
-            <div><span class="pill ok">Não medicamento</span></div>
-            <div>Higiene e beleza</div>
-            <div>Cabelos</div>
-            <div>Shampoo e condicionador</div>
+        </div>
+        <div class="tablist" role="tablist" aria-label="Fonte do mapeamento">
+          <button type="button" role="tab" data-tab="map:cmed" aria-selected="true" aria-controls="mapPanel-cmed" id="mapTab-cmed">CMED</button>
+          <button type="button" role="tab" data-tab="map:iqvia" aria-selected="false" aria-controls="mapPanel-iqvia" id="mapTab-iqvia">IQVIA</button>
+          <button type="button" role="tab" data-tab="map:tarjado" aria-selected="false" aria-controls="mapPanel-tarjado" id="mapTab-tarjado">Base de Tarjados</button>
+        </div>
+
+        <div class="tabpanel" data-tabpanel="map:cmed" id="mapPanel-cmed" role="tabpanel" aria-labelledby="mapTab-cmed">
+          <div class="toolbar">
+            <div class="search-wrap">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <input class="search" type="search" placeholder="Buscar classe ou categoria…" aria-label="Buscar em mapeamento CMED" data-table-search="mapeamento_cmed" />
+            </div>
+            <button class="btn primary" type="button" data-new-table="mapeamento_cmed">+ Novo mapeamento</button>
           </div>
-          <div class="cols item cat-row">
-            <div><span class="pill ok">Não medicamento</span></div>
-            <div>Higiene e beleza</div>
-            <div>Pele</div>
-            <div>Hidratantes</div>
+          <div class="list" data-table-list="mapeamento_cmed">
+            <div class="cols head"></div>
+            <div class="rows"></div>
+            <div class="empty-state hidden">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <p>Nenhum mapeamento encontrado para essa busca.</p>
+            </div>
           </div>
+          <p class="count-note"></p>
+        </div>
+
+        <div class="tabpanel hidden" data-tabpanel="map:iqvia" id="mapPanel-iqvia" role="tabpanel" aria-labelledby="mapTab-iqvia">
+          <div class="toolbar">
+            <div class="search-wrap">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <input class="search" type="search" placeholder="Buscar área ou categoria…" aria-label="Buscar em mapeamento IQVIA" data-table-search="mapeamento_iqvia" />
+            </div>
+            <button class="btn primary" type="button" data-new-table="mapeamento_iqvia">+ Novo mapeamento</button>
+          </div>
+          <div class="list" data-table-list="mapeamento_iqvia">
+            <div class="cols head"></div>
+            <div class="rows"></div>
+            <div class="empty-state hidden">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <p>Nenhum mapeamento encontrado para essa busca.</p>
+            </div>
+          </div>
+          <p class="count-note"></p>
+        </div>
+
+        <div class="tabpanel hidden" data-tabpanel="map:tarjado" id="mapPanel-tarjado" role="tabpanel" aria-labelledby="mapTab-tarjado">
+          <div class="toolbar">
+            <div class="search-wrap">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <input class="search" type="search" placeholder="Buscar seção ou categoria…" aria-label="Buscar em mapeamento de Tarjados" data-table-search="mapeamento_tarjado" />
+            </div>
+            <button class="btn primary" type="button" data-new-table="mapeamento_tarjado">+ Novo mapeamento</button>
+          </div>
+          <div class="list" data-table-list="mapeamento_tarjado">
+            <div class="cols head"></div>
+            <div class="rows"></div>
+            <div class="empty-state hidden">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <p>Nenhum mapeamento encontrado para essa busca.</p>
+            </div>
+          </div>
+          <p class="count-note"></p>
+        </div>
+      </section>
+
+      <section id="bases" class="screen hidden">
+        <div class="page-head">
+          <div>
+            <h1>Bases de dados importadas</h1>
+            <p class="sub">Registros brutos das fontes externas usadas no enriquecimento.</p>
+          </div>
+        </div>
+        <div class="tablist" role="tablist" aria-label="Base de dados">
+          <button type="button" role="tab" data-tab="bases:abcfarma" aria-selected="true" aria-controls="basesPanel-abcfarma" id="basesTab-abcfarma">ABCFarma</button>
+          <button type="button" role="tab" data-tab="bases:anvisa_cmed" aria-selected="false" aria-controls="basesPanel-anvisa_cmed" id="basesTab-anvisa_cmed">CMED / ANVISA</button>
+          <button type="button" role="tab" data-tab="bases:tarjados" aria-selected="false" aria-controls="basesPanel-tarjados" id="basesTab-tarjados">Base de Tarjados</button>
+          <button type="button" role="tab" data-tab="bases:iqvia" aria-selected="false" aria-controls="basesPanel-iqvia" id="basesTab-iqvia">IQVIA</button>
+          <button type="button" role="tab" data-tab="bases:substancias" aria-selected="false" aria-controls="basesPanel-substancias" id="basesTab-substancias">Substâncias controladas</button>
+        </div>
+
+        <div class="tabpanel" data-tabpanel="bases:abcfarma" id="basesPanel-abcfarma" role="tabpanel" aria-labelledby="basesTab-abcfarma">
+          <div class="toolbar">
+            <div class="search-wrap">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <input class="search" type="search" placeholder="Buscar EAN, produto ou laboratório…" aria-label="Buscar em ABCFarma" data-table-search="abcfarma" />
+            </div>
+            <button class="btn primary" type="button" data-new-table="abcfarma">+ Novo registro</button>
+          </div>
+          <div class="list" data-table-list="abcfarma">
+            <div class="cols head"></div>
+            <div class="rows"></div>
+            <div class="empty-state hidden">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <p>Nenhum registro encontrado para essa busca.</p>
+            </div>
+          </div>
+          <p class="count-note"></p>
+        </div>
+
+        <div class="tabpanel hidden" data-tabpanel="bases:anvisa_cmed" id="basesPanel-anvisa_cmed" role="tabpanel" aria-labelledby="basesTab-anvisa_cmed">
+          <div class="toolbar">
+            <div class="search-wrap">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <input class="search" type="search" placeholder="Buscar EAN, produto ou laboratório…" aria-label="Buscar em CMED" data-table-search="anvisa_cmed" />
+            </div>
+            <button class="btn primary" type="button" data-new-table="anvisa_cmed">+ Novo registro</button>
+          </div>
+          <div class="list" data-table-list="anvisa_cmed">
+            <div class="cols head"></div>
+            <div class="rows"></div>
+            <div class="empty-state hidden">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <p>Nenhum registro encontrado para essa busca.</p>
+            </div>
+          </div>
+          <p class="count-note"></p>
+        </div>
+
+        <div class="tabpanel hidden" data-tabpanel="bases:tarjados" id="basesPanel-tarjados" role="tabpanel" aria-labelledby="basesTab-tarjados">
+          <div class="toolbar">
+            <div class="search-wrap">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <input class="search" type="search" placeholder="Buscar EAN, produto ou laboratório…" aria-label="Buscar na Base de Tarjados" data-table-search="tarjados" />
+            </div>
+            <button class="btn primary" type="button" data-new-table="tarjados">+ Novo registro</button>
+          </div>
+          <div class="list" data-table-list="tarjados">
+            <div class="cols head"></div>
+            <div class="rows"></div>
+            <div class="empty-state hidden">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <p>Nenhum registro encontrado para essa busca.</p>
+            </div>
+          </div>
+          <p class="count-note"></p>
+        </div>
+
+        <div class="tabpanel hidden" data-tabpanel="bases:iqvia" id="basesPanel-iqvia" role="tabpanel" aria-labelledby="basesTab-iqvia">
+          <div class="toolbar">
+            <div class="search-wrap">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <input class="search" type="search" placeholder="Buscar EAN, marca ou descrição…" aria-label="Buscar em IQVIA" data-table-search="iqvia" />
+            </div>
+            <button class="btn primary" type="button" data-new-table="iqvia">+ Novo registro</button>
+          </div>
+          <div class="list" data-table-list="iqvia">
+            <div class="cols head"></div>
+            <div class="rows"></div>
+            <div class="empty-state hidden">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <p>Nenhum registro encontrado para essa busca.</p>
+            </div>
+          </div>
+          <p class="count-note"></p>
+        </div>
+
+        <div class="tabpanel hidden" data-tabpanel="bases:substancias" id="basesPanel-substancias" role="tabpanel" aria-labelledby="basesTab-substancias">
+          <div class="toolbar">
+            <div class="search-wrap">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <input class="search" type="search" placeholder="Buscar substância ou lista…" aria-label="Buscar em substâncias controladas" data-table-search="substancias" />
+            </div>
+            <button class="btn primary" type="button" data-new-table="substancias">+ Novo registro</button>
+          </div>
+          <div class="list" data-table-list="substancias">
+            <div class="cols head"></div>
+            <div class="rows"></div>
+            <div class="empty-state hidden">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M11.7 10.3a6 6 0 1 0-1.4 1.4l3.5 3.5.7-.7zM6.5 11a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9"/></svg>
+              <p>Nenhum registro encontrado para essa busca.</p>
+            </div>
+          </div>
+          <p class="count-note"></p>
         </div>
       </section>
 
@@ -839,11 +1146,87 @@
         </div>
       </section>
 
+      <section id="config" class="screen hidden">
+        <div class="page-head">
+          <div>
+            <h1>Configurações da aplicação</h1>
+            <p class="sub">Parâmetros de operação do catálogo. Alterações valem para toda a equipe.</p>
+          </div>
+        </div>
+        <div class="alert" role="status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+          <span>Chaves de API e credenciais de banco de dados ficam em variáveis de ambiente do servidor — não são editadas por aqui, por segurança.</span>
+        </div>
+        <form class="panel" id="configForm" style="max-width:560px;">
+          <div class="group">
+            <h2>Paginação da fila</h2>
+            <div class="grid2">
+              <div class="field">
+                <label for="cfgPaginaPadrao">Itens por página (padrão)</label>
+                <input id="cfgPaginaPadrao" name="pagina_padrao" type="number" inputmode="numeric" min="1" max="200" autocomplete="off" required />
+              </div>
+              <div class="field">
+                <label for="cfgPaginaMaxima">Itens por página (máximo)</label>
+                <input id="cfgPaginaMaxima" name="pagina_maxima" type="number" inputmode="numeric" min="1" max="500" autocomplete="off" required />
+              </div>
+            </div>
+          </div>
+          <div class="group">
+            <h2>Inteligência artificial</h2>
+            <div class="field">
+              <label for="cfgModelo">Modelo usado no enriquecimento</label>
+              <select id="cfgModelo" name="modelo_ia">
+                <option value="claude-sonnet-5">Claude Sonnet 5</option>
+                <option value="claude-opus-5">Claude Opus 5</option>
+                <option value="claude-haiku-4-5">Claude Haiku 4.5</option>
+              </select>
+            </div>
+          </div>
+          <div class="modal-foot" style="padding:0;border:0;margin-top:18px;">
+            <button class="btn" type="button" id="configReset">Restaurar padrão</button>
+            <button class="btn primary" type="submit">Salvar configurações</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="prompts" class="screen hidden">
+        <div class="page-head">
+          <div>
+            <h1>Prompts de enriquecimento</h1>
+            <p class="sub">Textos enviados ao Claude durante o enriquecimento, direto do código-fonte (enrich_produtos.py).</p>
+          </div>
+        </div>
+        <div class="alert" role="status">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.6 17a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+          <span>Isso edita uma cópia salva só neste navegador. Não altera o arquivo enrich_produtos.py nem afeta outros usuários — para valer em produção, alguém ainda precisa aplicar a mudança no código e reimplantar.</span>
+        </div>
+        <div class="prompt-layout">
+          <div class="prompt-list" id="promptList" role="list" aria-label="Prompts disponíveis"></div>
+          <div class="prompt-editor">
+            <div class="prompt-editor-head">
+              <div>
+                <h2 id="promptEditorTitle">Prompt</h2>
+                <p class="sub" id="promptEditorDesc"></p>
+              </div>
+              <div class="actions">
+                <button class="btn" type="button" id="promptRestore">Restaurar original</button>
+                <button class="btn primary" type="button" id="promptSave">Salvar prompt</button>
+              </div>
+            </div>
+            <div class="field">
+              <label for="promptTextarea">Texto do system prompt</label>
+              <textarea id="promptTextarea" class="prompt-textarea" spellcheck="false" autocomplete="off"></textarea>
+            </div>
+            <p class="count-note" id="promptMeta"></p>
+          </div>
+        </div>
+      </section>
+
       <section id="pipeline" class="screen hidden">
         <div class="page-head">
           <div>
             <h1>Como funciona o enriquecimento</h1>
-            <p class="sub">Da fonte oficial até a validação humana — nunca um cadastro publicado "no achismo".</p>
+            <p class="sub">Da fonte oficial até a validação humana — nunca um cadastro publicado “no achismo”.</p>
           </div>
         </div>
 
@@ -914,7 +1297,7 @@
             <div class="pillar-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z"/><path d="M9.5 12l2 2 3.5-3.5"/></svg>
             </div>
-            <h4>Tarja nunca é "achismo"</h4>
+            <h4>Tarja nunca é “achismo”</h4>
             <p>A cor da tarja só é aceita se vier de uma fonte oficial (ANVISA, bulário) ou de uma verificação dedicada — nunca por inferência do tipo "parece com outro remédio da mesma classe".</p>
           </div>
           <div class="pillar">
@@ -944,6 +1327,41 @@
     </div>
   </div>
 
+  <dialog id="crudModal">
+    <div class="modal-head">
+      <div>
+        <h2 id="crudModalTitle">Novo registro</h2>
+        <p id="crudModalDesc"></p>
+      </div>
+      <button class="modal-close" type="button" id="crudModalClose" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <form id="crudForm">
+      <div class="modal-body form-grid" id="crudModalBody"></div>
+      <div class="modal-foot">
+        <button class="btn" type="button" id="crudCancel">Cancelar</button>
+        <button class="btn primary" type="submit">Salvar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirmModal">
+    <div class="modal-head">
+      <h2 id="confirmModalTitle">Excluir registro?</h2>
+      <button class="modal-close" type="button" id="confirmModalClose" aria-label="Fechar">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p id="confirmModalText"></p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" type="button" id="confirmCancel">Cancelar</button>
+      <button class="btn primary" type="button" id="confirmDeleteBtn" style="background:var(--danger);border-color:var(--danger);">Excluir</button>
+    </div>
+  </dialog>
+
   <div class="toast-region" id="toastRegion" role="status" aria-live="polite"></div>
 
   <script>
@@ -971,7 +1389,7 @@
     });
 
     // ---------- navigation ----------
-    function go(id) {
+    function showScreen(id) {
       document.querySelectorAll(".screen").forEach((el) => {
         el.classList.toggle("hidden", el.id !== id);
       });
@@ -981,6 +1399,20 @@
       });
       closeMenu();
       window.scrollTo({ top: 0 });
+    }
+
+    function go(id) {
+      if (typeof hasUnsavedPromptChanges === "function" && hasUnsavedPromptChanges() && id !== "prompts") {
+        openConfirm({
+          title: "Descartar alterações?",
+          message: "Você tem alterações não salvas no prompt atual. Sair sem salvar?",
+          confirmLabel: "Sair sem salvar",
+          danger: true,
+          onConfirm: () => showScreen(id),
+        });
+        return;
+      }
+      showScreen(id);
     }
 
     document.querySelectorAll("[data-go]").forEach((el) => {
@@ -1161,6 +1593,719 @@
         showToast(`Fontes consultadas para EAN ${document.getElementById("fontesEan").value}.`);
       }, 700);
     });
+
+    // ---------- admin: tabs (Mapeamentos / Bases de dados) ----------
+    document.addEventListener("click", (event) => {
+      const tabBtn = event.target.closest("[data-tab]");
+      if (!tabBtn) return;
+      const [group] = tabBtn.dataset.tab.split(":");
+      document.querySelectorAll(`[data-tab^="${group}:"]`).forEach((b) => {
+        b.setAttribute("aria-selected", String(b === tabBtn));
+      });
+      document.querySelectorAll(`[data-tabpanel^="${group}:"]`).forEach((panel) => {
+        panel.classList.toggle("hidden", panel.dataset.tabpanel !== tabBtn.dataset.tab);
+      });
+    });
+
+    // ---------- admin: helpers ----------
+    function escapeHtml(str) {
+      return String(str ?? "").replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+      }[c]));
+    }
+    function pillHtml(kind, text) {
+      return `<span class="pill ${kind}">${escapeHtml(text)}</span>`;
+    }
+    function tarjaPill(v) {
+      const map = { sem_tarja: ["ok", "Sem tarja"], vermelha: ["danger", "Vermelha"], preta: ["neutral", "Preta"], nao_aplicavel: ["warn", "N/A"] };
+      const [kind, text] = map[v] || ["neutral", v || "—"];
+      return pillHtml(kind, text);
+    }
+    function pad(n, len) { return String(n).padStart(len, "0"); }
+    function categoriaLabel(id) {
+      const c = TABLES.categorias.data.find((r) => r.id === id);
+      if (!c) return "—";
+      return `${c.departamento} › ${c.categoria}${c.subcategoria ? " › " + c.subcategoria : ""}`;
+    }
+    function categoriaOptions() {
+      return TABLES.categorias.data.map((c) => [c.id, `${c.departamento} › ${c.categoria}${c.subcategoria ? " › " + c.subcategoria : ""}`]);
+    }
+    function loadTableData(key, fallback) {
+      try {
+        const raw = localStorage.getItem(`radar_${key}`);
+        if (raw) return JSON.parse(raw);
+      } catch (err) { /* localStorage indisponível — segue com dados padrão */ }
+      return fallback;
+    }
+    function persistTableData(key) {
+      try {
+        localStorage.setItem(`radar_${key}`, JSON.stringify(TABLES[key].data));
+      } catch (err) { /* privado/sem quota — edição continua só nesta sessão */ }
+    }
+
+    // ---------- admin: dados mockados (15 por tabela) ----------
+    const MARCAS = ["EMS", "Neo Química", "Medley", "Eurofarma", "Nivea", "Seda", "Dove", "Cimed", "Sanofi", "Bayer", "Vitamedic", "Hypera", "Aché", "Germed", "Cristália"];
+    const LABS = ["EMS S/A", "Eurofarma Lab.", "Medley Farmacêutica", "Cimed Indústria", "Sanofi Medley", "Bayer S.A.", "Hypera Pharma", "Aché Labs", "Germed Farmacêutica", "Cristália Produtos Químicos"];
+    const PRODUTOS_MED = ["Dipirona Sódica 500mg", "Paracetamol 750mg", "Ibuprofeno 400mg", "Amoxicilina 500mg", "Loratadina 10mg", "Omeprazol 20mg", "Losartana Potássica 50mg", "Sinvastatina 20mg", "Metformina 850mg", "Azitromicina 500mg", "Sertralina 50mg", "Ácido Fólico 5mg", "Vitamina D3 2000UI", "Clonazepam 2mg", "Rivotril 2mg"];
+
+    function buildCategorias() {
+      const rows = [
+        ["medicamento", "Dor e febre", "Analgésicos", "Dipirona"],
+        ["medicamento", "Gripe e resfriado", "Antigripais", ""],
+        ["medicamento", "Aparelho digestivo", "Antiácidos", "Omeprazol"],
+        ["medicamento", "Colesterol e diabetes", "Hipoglicemiantes", "Metformina"],
+        ["medicamento", "Sistema nervoso", "Ansiolíticos", "Clonazepam"],
+        ["nao_medicamento", "Higiene e beleza", "Cabelos", "Shampoo e condicionador"],
+        ["nao_medicamento", "Higiene e beleza", "Pele", "Hidratantes"],
+        ["nao_medicamento", "Higiene e beleza", "Higiene bucal", "Escovas e cremes dentais"],
+        ["nao_medicamento", "Suplementos", "Vitaminas", "Vitamina D"],
+        ["nao_medicamento", "Mãe e bebê", "Fraldas", "Fraldas descartáveis"],
+        ["nao_medicamento", "Higiene e beleza", "Barba e cuidados masculinos", "Pós-barba"],
+        ["medicamento", "Alergias", "Antialérgicos", "Loratadina"],
+        ["medicamento", "Antibióticos", "Penicilinas", "Amoxicilina"],
+        ["nao_medicamento", "Higiene e beleza", "Maquiagem", "Base"],
+        ["nao_medicamento", "Alimentos", "Suplementos alimentares", "Whey protein"],
+      ];
+      return rows.map((r, i) => ({ id: i + 1, tipo_produto: r[0], departamento: r[1], categoria: r[2], subcategoria: r[3], ativo: i !== 10 }));
+    }
+    function buildMapCmed() {
+      const raw = ["ANALGESICOS E ANTITERMICOS", "ANTIINFLAMATORIOS NAO HORMONAIS", "ANTIGRIPAIS", "ANTIACIDOS E ANTIULCEROSOS", "HIPOGLICEMIANTES ORAIS", "ANSIOLITICOS", "ANTIALERGICOS - ANTI-HISTAMINICOS", "PENICILINAS", "ANTI-HIPERTENSIVOS", "HIPOLIPEMIANTES", "ANTIDEPRESSIVOS", "VITAMINAS E MINERAIS", "ANTIBIOTICOS MACROLIDEOS", "ANTIESPASMODICOS", "ANTIEMETICOS"];
+      return raw.map((r, i) => ({ id: i + 1, categoria: r, categoria_id: (i % 15) + 1, revisado: i % 3 !== 0 }));
+    }
+    function buildMapIqvia() {
+      const areas = ["OTC", "RX", "Dermo", "Higiene", "Nutrição", "OTC", "RX", "Dermo", "Higiene", "Nutrição", "OTC", "RX", "Dermo", "Higiene", "OTC"];
+      return areas.map((area, i) => ({
+        id: i + 1, tipo_produto: i % 4 === 0 ? "medicamento" : "nao_medicamento", area_farmacia: area,
+        sub_cat1: `SC1-${i + 1}`, sub_cat2: `SC2-${i + 1}`, sub_cat3: i % 2 === 0 ? `SC3-${i + 1}` : "", sub_cat4: "",
+        categoria_id: (i % 15) + 1, revisado: i % 4 !== 1,
+      }));
+    }
+    function buildMapTarjado() {
+      const secoes = ["Genéricos", "Similares", "Referência", "OTC", "Fitoterápicos"];
+      return Array.from({ length: 15 }, (_, i) => ({
+        id: i + 1, secao: secoes[i % secoes.length], nec1: `NEC1-${i + 1}`, nec2: `NEC2-${i + 1}`, nec3: i % 3 === 0 ? `NEC3-${i + 1}` : "",
+        categoria_id: (i % 15) + 1, revisado: i % 5 !== 0,
+      }));
+    }
+    function buildAbcfarma() {
+      return Array.from({ length: 15 }, (_, i) => ({
+        id: i + 1, codigo_produto: `AB${1000 + i}`, ean: `789101${pad(i, 7)}`,
+        descricao_produto: PRODUTOS_MED[i], apresentacao: "Cx. 20 comprimidos", laboratorio: LABS[i % LABS.length],
+        registro_ms: `1.${pad(1000 + i, 4)}.${pad(i, 4)}`, tipo_medicamento: i % 3 === 0 ? "Genérico" : i % 3 === 1 ? "Similar" : "Referência",
+        principio_ativo: PRODUTOS_MED[i].split(" ")[0], produto_referencia: i % 3 === 2 ? "Sim" : "Não", ggrem: `${500000 + i}`,
+      }));
+    }
+    function buildAnvisaCmed() {
+      return Array.from({ length: 15 }, (_, i) => ({
+        id: i + 1, ggrem: `${500000 + i}`, substancia: PRODUTOS_MED[i].split(" ")[0], cnpj: `00.000.${pad(i, 3)}/0001-00`,
+        laboratorio: LABS[i % LABS.length], registro_ms: `1.${pad(1000 + i, 4)}.${pad(i, 4)}`, ean_1: `789101${pad(i, 7)}`, ean_2: "", ean_3: "",
+        produto: PRODUTOS_MED[i], apresentacao: "Cx. 20 comprimidos", classe_terapeutica: "ANALGESICOS E ANTITERMICOS",
+        tipo_medicamento: i % 2 === 0 ? "Genérico" : "Similar",
+        tarja: i % 4 === 0 ? "sem_tarja" : i % 4 === 1 ? "vermelha" : i % 4 === 2 ? "preta" : "nao_aplicavel",
+      }));
+    }
+    function buildTarjados() {
+      return Array.from({ length: 15 }, (_, i) => ({
+        id: i + 1, ean: `789101${pad(i, 7)}`, ncm: "30049099", grupo: i % 2 === 0 ? "Controlado" : "Não controlado",
+        produto: PRODUTOS_MED[i], laboratorio: LABS[i % LABS.length], holding: LABS[i % LABS.length], divisao: "Farma",
+        secao: "Genéricos", subsecao: "Analgésicos", setor_nec_aberto: "Dor e febre",
+        nec1: `NEC1-${i + 1}`, nec2: `NEC2-${i + 1}`, nec3: "", molecula: PRODUTOS_MED[i].split(" ")[0],
+      }));
+    }
+    function buildIqvia() {
+      return Array.from({ length: 15 }, (_, i) => ({
+        id: i + 1, ean: `789101${pad(i, 7)}`, fcc: `FCC${1000 + i}`, brand: MARCAS[i % MARCAS.length],
+        descricao_longa: `${PRODUTOS_MED[i]} — embalagem padrão`, descricao_fabricante: LABS[i % LABS.length], descricao_corporacao: LABS[i % LABS.length],
+        area_farmacia: i % 2 === 0 ? "OTC" : "RX", sub_cat1: `SC1-${i + 1}`, sub_cat2: `SC2-${i + 1}`,
+      }));
+    }
+    function buildSubstancias() {
+      return Array.from({ length: 15 }, (_, i) => ({
+        id: i + 1, fonte: i % 2 === 0 ? "portaria_344" : "in_360_2025", lista: i % 2 === 0 ? "Lista B1" : "Lista C1",
+        descricao_lista: i % 2 === 0 ? "Psicotrópicos" : "Outras substâncias sujeitas a controle",
+        substancia: PRODUTOS_MED[i].split(" ")[0], validade_receita_dias: i % 2 === 0 ? 30 : 60,
+      }));
+    }
+
+    // ---------- admin: config de tabelas (colunas da lista + campos do formulário) ----------
+    const TABLES = {
+      categorias: {
+        label: "categoria",
+        rowLabel: (row) => `${row.departamento} › ${row.categoria}`,
+        columns: [
+          { key: "tipo_produto", label: "Tipo", render: (v) => pillHtml(v === "medicamento" ? "danger" : "ok", v === "medicamento" ? "Medicamento" : "Não medicamento") },
+          { key: "departamento", label: "Departamento" },
+          { key: "categoria", label: "Categoria" },
+          { key: "subcategoria", label: "Subcategoria", render: (v) => escapeHtml(v || "—") },
+          { key: "ativo", label: "Ativo", type: "bool-toggle" },
+        ],
+        gridTemplate: "minmax(120px,1fr) minmax(140px,1.1fr) minmax(140px,1.1fr) minmax(160px,1.2fr) 70px 84px",
+        fields: [
+          { key: "tipo_produto", label: "Tipo de produto", type: "select", options: [["medicamento", "Medicamento"], ["nao_medicamento", "Não medicamento"]], required: true },
+          { key: "departamento", label: "Departamento", type: "text", required: true },
+          { key: "categoria", label: "Categoria", type: "text", required: true },
+          { key: "subcategoria", label: "Subcategoria (opcional)", type: "text" },
+          { key: "ativo", label: "Categoria ativa", type: "checkbox", default: true },
+        ],
+        data: loadTableData("categorias", buildCategorias()),
+      },
+      mapeamento_cmed: {
+        label: "mapeamento CMED",
+        rowLabel: (row) => row.categoria,
+        columns: [
+          { key: "categoria", label: "Classe (CMED)" },
+          { key: "categoria_id", label: "Categoria oficial", render: (v) => escapeHtml(categoriaLabel(v)) },
+          { key: "revisado", label: "Revisado", type: "bool-toggle" },
+        ],
+        gridTemplate: "minmax(200px,1.4fr) minmax(220px,1.6fr) 90px 84px",
+        fields: [
+          { key: "categoria", label: "Classe terapêutica (CMED)", type: "text", required: true },
+          { key: "categoria_id", label: "Categoria oficial", type: "select", options: () => categoriaOptions(), required: true },
+          { key: "revisado", label: "Já revisado por um humano", type: "checkbox" },
+        ],
+        data: loadTableData("mapeamento_cmed", buildMapCmed()),
+      },
+      mapeamento_iqvia: {
+        label: "mapeamento IQVIA",
+        rowLabel: (row) => row.area_farmacia,
+        columns: [
+          { key: "tipo_produto", label: "Tipo", render: (v) => pillHtml(v === "medicamento" ? "danger" : "ok", v === "medicamento" ? "Medicamento" : "Não medicamento") },
+          { key: "area_farmacia", label: "Área farmácia" },
+          { key: "sub_cat1", label: "Subcategoria IQVIA", render: (v, row) => escapeHtml([row.sub_cat1, row.sub_cat2, row.sub_cat3, row.sub_cat4].filter(Boolean).join(" / ")) },
+          { key: "categoria_id", label: "Categoria oficial", render: (v) => escapeHtml(categoriaLabel(v)) },
+          { key: "revisado", label: "Revisado", type: "bool-toggle" },
+        ],
+        gridTemplate: "minmax(150px,1fr) minmax(110px,1fr) minmax(160px,1.4fr) minmax(200px,1.5fr) 90px 84px",
+        fields: [
+          { key: "tipo_produto", label: "Tipo de produto", type: "select", options: [["medicamento", "Medicamento"], ["nao_medicamento", "Não medicamento"]], required: true },
+          { key: "area_farmacia", label: "Área farmácia", type: "text", required: true },
+          { key: "sub_cat1", label: "Subcategoria 1", type: "text" },
+          { key: "sub_cat2", label: "Subcategoria 2", type: "text" },
+          { key: "sub_cat3", label: "Subcategoria 3", type: "text" },
+          { key: "sub_cat4", label: "Subcategoria 4", type: "text" },
+          { key: "categoria_id", label: "Categoria oficial", type: "select", options: () => categoriaOptions(), required: true },
+          { key: "revisado", label: "Já revisado por um humano", type: "checkbox" },
+        ],
+        data: loadTableData("mapeamento_iqvia", buildMapIqvia()),
+      },
+      mapeamento_tarjado: {
+        label: "mapeamento de Tarjados",
+        rowLabel: (row) => row.secao,
+        columns: [
+          { key: "secao", label: "Seção" },
+          { key: "nec1", label: "NEC", render: (v, row) => escapeHtml([row.nec1, row.nec2, row.nec3].filter(Boolean).join(" / ")) },
+          { key: "categoria_id", label: "Categoria oficial", render: (v) => escapeHtml(categoriaLabel(v)) },
+          { key: "revisado", label: "Revisado", type: "bool-toggle" },
+        ],
+        gridTemplate: "minmax(140px,1fr) minmax(180px,1.4fr) minmax(200px,1.5fr) 90px 84px",
+        fields: [
+          { key: "secao", label: "Seção", type: "text", required: true },
+          { key: "nec1", label: "NEC 1", type: "text" },
+          { key: "nec2", label: "NEC 2", type: "text" },
+          { key: "nec3", label: "NEC 3", type: "text" },
+          { key: "categoria_id", label: "Categoria oficial", type: "select", options: () => categoriaOptions(), required: true },
+          { key: "revisado", label: "Já revisado por um humano", type: "checkbox" },
+        ],
+        data: loadTableData("mapeamento_tarjado", buildMapTarjado()),
+      },
+      abcfarma: {
+        label: "registro ABCFarma",
+        columns: [
+          { key: "ean", label: "EAN", render: (v) => `<span class="ean">${escapeHtml(v)}</span>` },
+          { key: "descricao_produto", label: "Descrição" },
+          { key: "laboratorio", label: "Laboratório" },
+          { key: "registro_ms", label: "Registro MS" },
+        ],
+        gridTemplate: "minmax(120px,1fr) minmax(200px,1.6fr) minmax(140px,1.1fr) minmax(120px,1fr) 84px",
+        fields: [
+          { key: "codigo_produto", label: "Código do produto", type: "text", required: true },
+          { key: "ean", label: "EAN", type: "text", required: true, inputmode: "numeric" },
+          { key: "descricao_produto", label: "Descrição do produto", type: "text", required: true },
+          { key: "apresentacao", label: "Apresentação", type: "text" },
+          { key: "laboratorio", label: "Laboratório", type: "text" },
+          { key: "registro_ms", label: "Registro MS", type: "text" },
+          { key: "tipo_medicamento", label: "Tipo de medicamento", type: "select", options: [["Genérico", "Genérico"], ["Similar", "Similar"], ["Referência", "Referência"]] },
+          { key: "principio_ativo", label: "Princípio ativo", type: "text" },
+          { key: "produto_referencia", label: "Produto de referência", type: "text" },
+          { key: "ggrem", label: "GGREM", type: "text" },
+        ],
+        data: loadTableData("abcfarma", buildAbcfarma()),
+      },
+      anvisa_cmed: {
+        label: "registro CMED",
+        columns: [
+          { key: "produto", label: "Produto" },
+          { key: "ean_1", label: "EAN", render: (v) => `<span class="ean">${escapeHtml(v || "—")}</span>` },
+          { key: "laboratorio", label: "Laboratório" },
+          { key: "tarja", label: "Tarja", render: (v) => tarjaPill(v) },
+        ],
+        gridTemplate: "minmax(180px,1.5fr) minmax(120px,1fr) minmax(150px,1.2fr) minmax(130px,1fr) 84px",
+        fields: [
+          { key: "ggrem", label: "GGREM", type: "text", required: true },
+          { key: "substancia", label: "Substância", type: "text", required: true },
+          { key: "cnpj", label: "CNPJ do laboratório", type: "text" },
+          { key: "laboratorio", label: "Laboratório", type: "text" },
+          { key: "registro_ms", label: "Registro MS", type: "text" },
+          { key: "ean_1", label: "EAN 1", type: "text", inputmode: "numeric" },
+          { key: "ean_2", label: "EAN 2 (opcional)", type: "text", inputmode: "numeric" },
+          { key: "ean_3", label: "EAN 3 (opcional)", type: "text", inputmode: "numeric" },
+          { key: "produto", label: "Produto", type: "text", required: true },
+          { key: "apresentacao", label: "Apresentação", type: "text" },
+          { key: "classe_terapeutica", label: "Classe terapêutica", type: "text" },
+          { key: "tipo_medicamento", label: "Tipo de medicamento", type: "select", options: [["Genérico", "Genérico"], ["Similar", "Similar"], ["Referência", "Referência"]] },
+          { key: "tarja", label: "Tarja", type: "select", options: [["sem_tarja", "Sem tarja"], ["vermelha", "Vermelha"], ["preta", "Preta"], ["nao_aplicavel", "Não aplicável"]] },
+        ],
+        data: loadTableData("anvisa_cmed", buildAnvisaCmed()),
+      },
+      tarjados: {
+        label: "registro da Base de Tarjados",
+        columns: [
+          { key: "ean", label: "EAN", render: (v) => `<span class="ean">${escapeHtml(v)}</span>` },
+          { key: "produto", label: "Produto" },
+          { key: "laboratorio", label: "Laboratório" },
+          { key: "grupo", label: "Grupo" },
+        ],
+        gridTemplate: "minmax(120px,1fr) minmax(200px,1.6fr) minmax(150px,1.2fr) minmax(120px,1fr) 84px",
+        fields: [
+          { key: "ean", label: "EAN", type: "text", required: true, inputmode: "numeric" },
+          { key: "produto", label: "Produto", type: "text", required: true },
+          { key: "laboratorio", label: "Laboratório", type: "text" },
+          { key: "holding", label: "Holding", type: "text" },
+          { key: "divisao", label: "Divisão", type: "text" },
+          { key: "grupo", label: "Grupo", type: "text" },
+          { key: "secao", label: "Seção", type: "text" },
+          { key: "subsecao", label: "Subseção", type: "text" },
+          { key: "setor_nec_aberto", label: "Setor NEC", type: "text" },
+          { key: "molecula", label: "Molécula", type: "text" },
+        ],
+        data: loadTableData("tarjados", buildTarjados()),
+      },
+      iqvia: {
+        label: "registro IQVIA",
+        columns: [
+          { key: "ean", label: "EAN", render: (v) => `<span class="ean">${escapeHtml(v)}</span>` },
+          { key: "brand", label: "Marca" },
+          { key: "descricao_longa", label: "Descrição" },
+          { key: "area_farmacia", label: "Área farmácia" },
+        ],
+        gridTemplate: "minmax(120px,1fr) minmax(130px,1fr) minmax(220px,1.8fr) minmax(120px,1fr) 84px",
+        fields: [
+          { key: "ean", label: "EAN", type: "text", required: true, inputmode: "numeric" },
+          { key: "brand", label: "Marca", type: "text", required: true },
+          { key: "descricao_longa", label: "Descrição longa", type: "textarea" },
+          { key: "descricao_fabricante", label: "Fabricante", type: "text" },
+          { key: "descricao_corporacao", label: "Corporação", type: "text" },
+          { key: "area_farmacia", label: "Área farmácia", type: "text" },
+          { key: "sub_cat1", label: "Subcategoria 1", type: "text" },
+          { key: "sub_cat2", label: "Subcategoria 2", type: "text" },
+        ],
+        data: loadTableData("iqvia", buildIqvia()),
+      },
+      substancias: {
+        label: "substância controlada",
+        columns: [
+          { key: "substancia", label: "Substância" },
+          { key: "lista", label: "Lista" },
+          { key: "fonte", label: "Fonte", render: (v) => escapeHtml(v === "portaria_344" ? "Portaria 344" : "IN 360/2025") },
+          { key: "validade_receita_dias", label: "Validade (dias)" },
+        ],
+        gridTemplate: "minmax(140px,1.2fr) minmax(120px,1fr) minmax(140px,1fr) 130px 84px",
+        fields: [
+          { key: "fonte", label: "Fonte", type: "select", options: [["portaria_344", "Portaria 344"], ["in_360_2025", "IN 360/2025"]], required: true },
+          { key: "lista", label: "Lista", type: "text", required: true },
+          { key: "descricao_lista", label: "Descrição da lista", type: "text" },
+          { key: "substancia", label: "Substância", type: "text", required: true },
+          { key: "validade_receita_dias", label: "Validade da receita (dias)", type: "number" },
+        ],
+        data: loadTableData("substancias", buildSubstancias()),
+      },
+    };
+    const MAPEAMENTO_KEYS = ["mapeamento_cmed", "mapeamento_iqvia", "mapeamento_tarjado"];
+
+    // ---------- admin: renderização das listas ----------
+    function renderTable(key) {
+      const cfg = TABLES[key];
+      const container = document.querySelector(`[data-table-list="${key}"]`);
+      if (!container) return;
+      const head = container.querySelector(".head");
+      const body = container.querySelector(".rows");
+      const empty = container.querySelector(".empty-state");
+      head.style.gridTemplateColumns = cfg.gridTemplate;
+      head.innerHTML = cfg.columns.map((c) => `<span>${escapeHtml(c.label)}</span>`).join("") + "<span></span>";
+
+      const query = (container.dataset.query || "").toLowerCase();
+      const rows = cfg.data.filter((row) => !query || Object.values(row).some((v) => String(v ?? "").toLowerCase().includes(query)));
+
+      body.innerHTML = rows.map((row) => {
+        const cells = cfg.columns.map((col) => {
+          if (col.type === "bool-toggle") {
+            const rowLabel = cfg.rowLabel ? cfg.rowLabel(row) : `registro #${row.id}`;
+            return `<div><label class="switch">
+              <input type="checkbox" data-toggle="${key}:${row.id}:${col.key}" ${row[col.key] ? "checked" : ""} aria-label="${escapeHtml(col.label)} — ${escapeHtml(rowLabel)}">
+              <span class="track" aria-hidden="true"></span>
+            </label></div>`;
+          }
+          const raw = row[col.key];
+          return `<div>${col.render ? col.render(raw, row) : escapeHtml(raw ?? "—")}</div>`;
+        });
+        const actions = `<div class="row-actions">
+          <button class="icon-btn" type="button" data-edit="${key}:${row.id}" aria-label="Editar registro">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          </button>
+          <button class="icon-btn danger" type="button" data-delete="${key}:${row.id}" aria-label="Excluir registro">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/></svg>
+          </button>
+        </div>`;
+        return `<div class="cols data-row" style="grid-template-columns:${cfg.gridTemplate}">${cells.join("")}${actions}</div>`;
+      }).join("");
+
+      empty.classList.toggle("hidden", rows.length > 0);
+      const note = container.parentElement.querySelector(".count-note");
+      if (note) note.textContent = `${rows.length} de ${cfg.data.length} registros — prévia travada em 15 por tabela.`;
+    }
+
+    document.querySelectorAll("[data-table-search]").forEach((input) => {
+      input.addEventListener("input", () => {
+        const key = input.dataset.tableSearch;
+        document.querySelector(`[data-table-list="${key}"]`).dataset.query = input.value.trim();
+        renderTable(key);
+      });
+    });
+
+    document.addEventListener("change", (event) => {
+      const toggle = event.target.closest("[data-toggle]");
+      if (!toggle) return;
+      const [key, id, field] = toggle.dataset.toggle.split(":");
+      const row = TABLES[key].data.find((r) => String(r.id) === id);
+      row[field] = toggle.checked;
+      persistTableData(key);
+      if (key === "categorias") MAPEAMENTO_KEYS.forEach(renderTable);
+      showToast(`Registro de ${TABLES[key].label} atualizado.`);
+    });
+
+    // ---------- admin: modal de criar/editar ----------
+    const crudModal = document.getElementById("crudModal");
+    const crudForm = document.getElementById("crudForm");
+    const crudTitle = document.getElementById("crudModalTitle");
+    const crudDesc = document.getElementById("crudModalDesc");
+    const crudBody = document.getElementById("crudModalBody");
+    let crudContext = { key: null, id: null };
+
+    const CODE_FIELD_PATTERN = /(ean|ggrem|codigo|cnpj|registro_ms|^ncm$|^fcc$)/i;
+    function fieldControlHtml(field, value) {
+      const val = value ?? field.default ?? "";
+      const id = `f_${field.key}`;
+      if (field.type === "select") {
+        const opts = typeof field.options === "function" ? field.options() : field.options;
+        const optionsHtml = opts.map(([ov, ol]) => `<option value="${escapeHtml(ov)}" ${String(ov) === String(val) ? "selected" : ""}>${escapeHtml(ol)}</option>`).join("");
+        return `<select id="${id}" name="${field.key}" ${field.required ? "required" : ""}>${optionsHtml}</select>`;
+      }
+      if (field.type === "checkbox") {
+        return `<label class="switch"><input type="checkbox" id="${id}" name="${field.key}" ${val ? "checked" : ""}><span class="track" aria-hidden="true"></span><span>${escapeHtml(field.label)}</span></label>`;
+      }
+      if (field.type === "textarea") {
+        return `<textarea id="${id}" name="${field.key}">${escapeHtml(val)}</textarea>`;
+      }
+      const type = field.type === "number" ? "number" : "text";
+      const noSpellcheck = field.inputmode === "numeric" || CODE_FIELD_PATTERN.test(field.key);
+      return `<input id="${id}" name="${field.key}" type="${type}" value="${escapeHtml(val)}" autocomplete="off" ${noSpellcheck ? 'spellcheck="false"' : ""} ${field.inputmode ? `inputmode="${field.inputmode}"` : ""} ${field.required ? "required" : ""} />`;
+    }
+
+    function openCrudModal(key, id) {
+      const cfg = TABLES[key];
+      const row = id != null ? cfg.data.find((r) => r.id === id) : null;
+      crudContext = { key, id };
+      crudTitle.textContent = row ? "Editar registro" : "Novo registro";
+      crudDesc.textContent = row ? `${cfg.label} · #${row.id}` : cfg.label;
+      crudBody.innerHTML = cfg.fields.map((field) => {
+        const wide = field.type === "textarea" ? " wide" : "";
+        if (field.type === "checkbox") {
+          return `<div class="field${wide}"><div class="checkbox-row">${fieldControlHtml(field, row ? row[field.key] : field.default)}</div></div>`;
+        }
+        return `<div class="field${wide}"><label for="f_${field.key}">${escapeHtml(field.label)}</label>${fieldControlHtml(field, row ? row[field.key] : "")}</div>`;
+      }).join("");
+      crudModal.showModal();
+      const firstInput = crudBody.querySelector("input, select, textarea");
+      if (firstInput) firstInput.focus();
+    }
+
+    crudForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const { key, id } = crudContext;
+      const cfg = TABLES[key];
+      const formData = new FormData(crudForm);
+      const record = id != null ? cfg.data.find((r) => r.id === id) : { id: Math.max(0, ...cfg.data.map((r) => r.id)) + 1 };
+      cfg.fields.forEach((field) => {
+        if (field.type === "checkbox") {
+          record[field.key] = crudBody.querySelector(`#f_${field.key}`).checked;
+        } else if (field.type === "number") {
+          const v = formData.get(field.key);
+          record[field.key] = v ? Number(v) : null;
+        } else {
+          record[field.key] = formData.get(field.key) || "";
+        }
+      });
+      const isNew = id == null;
+      if (isNew) cfg.data.unshift(record);
+      persistTableData(key);
+      renderTable(key);
+      if (key === "categorias") MAPEAMENTO_KEYS.forEach(renderTable);
+      crudModal.close();
+      showToast(isNew ? `Registro de ${cfg.label} criado.` : `Registro de ${cfg.label} salvo.`);
+    });
+    document.getElementById("crudModalClose").addEventListener("click", () => crudModal.close());
+    document.getElementById("crudCancel").addEventListener("click", () => crudModal.close());
+
+    // ---------- admin: modal de confirmação (genérico: exclusão, descartar alterações, etc.) ----------
+    const confirmModal = document.getElementById("confirmModal");
+    const confirmTitle = document.getElementById("confirmModalTitle");
+    const confirmText = document.getElementById("confirmModalText");
+    const confirmActionBtn = document.getElementById("confirmDeleteBtn");
+    let confirmCallback = null;
+
+    function openConfirm({ title, message, confirmLabel = "Confirmar", danger = false, onConfirm }) {
+      confirmTitle.textContent = title;
+      confirmText.textContent = message;
+      confirmActionBtn.textContent = confirmLabel;
+      confirmActionBtn.style.background = danger ? "var(--danger)" : "var(--blue)";
+      confirmActionBtn.style.borderColor = danger ? "var(--danger)" : "var(--blue)";
+      confirmCallback = onConfirm;
+      confirmModal.showModal();
+    }
+    function openConfirmDelete(key, id) {
+      const cfg = TABLES[key];
+      openConfirm({
+        title: "Excluir registro?",
+        message: `Excluir este registro de ${cfg.label}? Essa ação não pode ser desfeita.`,
+        confirmLabel: "Excluir",
+        danger: true,
+        onConfirm: () => {
+          cfg.data = cfg.data.filter((r) => r.id !== id);
+          persistTableData(key);
+          renderTable(key);
+          if (key === "categorias") MAPEAMENTO_KEYS.forEach(renderTable);
+          showToast(`Registro de ${cfg.label} excluído.`);
+        },
+      });
+    }
+    document.getElementById("confirmModalClose").addEventListener("click", () => confirmModal.close());
+    document.getElementById("confirmCancel").addEventListener("click", () => confirmModal.close());
+    confirmActionBtn.addEventListener("click", () => {
+      const callback = confirmCallback;
+      confirmCallback = null;
+      confirmModal.close();
+      if (callback) callback();
+    });
+
+    // ---------- admin: clique em editar/excluir/novo (delegado) ----------
+    document.addEventListener("click", (event) => {
+      const editBtn = event.target.closest("[data-edit]");
+      if (editBtn) {
+        const [key, id] = editBtn.dataset.edit.split(":");
+        openCrudModal(key, Number(id));
+        return;
+      }
+      const delBtn = event.target.closest("[data-delete]");
+      if (delBtn) {
+        const [key, id] = delBtn.dataset.delete.split(":");
+        openConfirmDelete(key, Number(id));
+        return;
+      }
+      const newBtn = event.target.closest("[data-new-table]");
+      if (newBtn) openCrudModal(newBtn.dataset.newTable, null);
+    });
+
+    Object.keys(TABLES).forEach((key) => renderTable(key));
+
+    // ---------- configurações da aplicação ----------
+    const CONFIG_DEFAULTS = { pagina_padrao: 50, pagina_maxima: 200, modelo_ia: "claude-sonnet-5" };
+    function loadConfig() {
+      try {
+        const raw = localStorage.getItem("radar_config");
+        return raw ? { ...CONFIG_DEFAULTS, ...JSON.parse(raw) } : { ...CONFIG_DEFAULTS };
+      } catch (err) { return { ...CONFIG_DEFAULTS }; }
+    }
+    function applyConfigToForm(cfg) {
+      document.getElementById("cfgPaginaPadrao").value = cfg.pagina_padrao;
+      document.getElementById("cfgPaginaMaxima").value = cfg.pagina_maxima;
+      document.getElementById("cfgModelo").value = cfg.modelo_ia;
+    }
+    applyConfigToForm(loadConfig());
+    document.getElementById("configForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const cfg = {
+        pagina_padrao: Number(document.getElementById("cfgPaginaPadrao").value) || CONFIG_DEFAULTS.pagina_padrao,
+        pagina_maxima: Number(document.getElementById("cfgPaginaMaxima").value) || CONFIG_DEFAULTS.pagina_maxima,
+        modelo_ia: document.getElementById("cfgModelo").value,
+      };
+      try { localStorage.setItem("radar_config", JSON.stringify(cfg)); } catch (err) { /* sem persistência local disponível */ }
+      showToast("Configurações salvas.");
+    });
+    document.getElementById("configReset").addEventListener("click", () => {
+      applyConfigToForm(CONFIG_DEFAULTS);
+      showToast("Configurações restauradas para o padrão.");
+    });
+
+    // ---------- prompts de enriquecimento (texto real de enrich_produtos.py) ----------
+    const PROMPT_ORIGINALS = {
+      system_prompt: `Você é um especialista em cadastro de produtos farmacêuticos para e-commerce (medicamentos, dermocosméticos, higiene, beleza, suplementos, puericultura, dispositivos médicos).
+
+PROCESSO: web_search (máx. 3) em qualquer fonte confiável (fabricante, ANVISA/Bulário, farmácias online); em divergência, priorize fabricante > ANVISA > farmácias. web_fetch (máx. 3) na(s) página(s) mais confiável(is). Busque a URL de imagem do produto no HTML (src/data-src/og:image, .jpg/.png/.webp) SOMENTE se for Não Medicamento. Se for medicamento (qualquer tarja, inclusive Sem Tarja), NUNCA retorne imagem_url (null), mesmo existindo.
+
+REGRA CRÍTICA: nunca invente, deduza, estime ou infira dado algum; nunca use produto ou apresentação semelhante. Campo não confirmado na fonte = null (sempre melhor que dado errado).
+
+TÍTULO (campo titulo, sem hífens) - título de e-commerce, curto e direto (até ~70 caracteres - é o que o cliente digita/lê na busca, título longo demais não é buscável e corta na listagem), sem repetir tudo que já está no campo principios_ativos:
+- Medicamento: comece pela marca/nome comercial (referência) ou pelo princípio ativo (genérico ou combinação sem marca própria). NUNCA comece pela finalidade terapêutica (ex: "Analgésico", "Antiácido Efervescente") - isso atrapalha a busca. Depois: um descritor curto quando existir (sabor, forma), público-alvo quando aplicável (Adulto/Infantil), terminando em quantidade + forma farmacêutica.
+- Não medicamento: [O que o produto é / Categoria] [Marca] [Linha] [Atributo/Especificação] [Volume/Quantidade]. "Categoria" é o tipo do objeto em português (Pomada, Fio Dental, Curativos, Absorvente, Shampoo, Enxaguante Bucal, Fórmula Infantil, Hastes Flexíveis, Fralda, Seringa), NÃO a finalidade terapêutica e NÃO o departamento da árvore. Ordem obrigatória: o que o produto É vem PRIMEIRO; marca vem DEPOIS. Pule o slot se não existir (sem linha = não invente linha). NUNCA comece pela marca - esse é o erro mais comum neste campo para não-medicamento. Errado: "Hipoglós Pomada Creme Assaduras 40g" / certo: "Pomada Creme Assaduras Hipoglós 40g". Errado: "Johnson's Baby Shampoo Regular 400ml" / certo: "Shampoo Johnson's Baby Regular 400ml". Errado: "Johnson's Reach Essencial Fio Dental Menta 100 Metros" / certo: "Fio Dental Johnson's Reach Essencial Menta 100 Metros". Errado: "Band Aid Curativos Transparente Respirável 40 Unidades" / certo: "Curativos Band Aid Transparente Respirável 40 Unidades". Errado: "Sempre Livre Absorvente Noturno com Abas Suave Leve 32 Unidades" / certo: "Absorvente Sempre Livre Noturno com Abas Suave Leve 32 Unidades". Errado: "Cotonete Johnson & Johnson Hastes Flexíveis 75 Unidades" / certo: "Hastes Flexíveis Cotonete Johnson & Johnson 75 Unidades". Errado: "Periogard Enxaguante Bucal Extra Mint Sem Álcool 250ml" / certo: "Enxaguante Bucal Periogard Extra Mint Sem Álcool 250ml". Errado: "Aptamil 2 Fórmula Infantil 400g" / certo: "Fórmula Infantil Aptamil 2 400g".
+Composição no título: com nome comercial reconhecido e 3 ou mais princípios ativos, NUNCA liste a composição completa no título, mesmo que a fonte mostre todas as concentrações - use só marca + descritor + quantidade/forma; a composição completa já vai inteira no campo principios_ativos, não precisa repetir no título. Esse é o erro mais comum nesse campo - antes de responder, confira se o título tem 3+ trechos "nome + mg/mcg/g/ml" e, se tiver e existir marca, corte-os. Com 1-2 princípios ativos, ou sem nome comercial (genérico/combinação sem marca própria), inclua nome + concentração de cada um. NUNCA escreva uma concentração sem o nome do princípio ativo do lado - errado: "185mg + 235mg + 178mg"; certo: "Hidróxido de Alumínio 185mg + Hidróxido de Magnésio 235mg". O nome do princípio ativo no título (incluindo o sal - Cloridrato/Maleato/Besilato/ Succinato/Bromidrato/Fumarato/Mesilato/Oxalato etc.) tem que ser EXATAMENTE o que veio confirmado na fonte - NUNCA troque por outro sal do mesmo fármaco só porque parece mais comum ou mais familiar (ex: não escreva "Cloridrato de Midazolam" se a fonte confirmou "Maleato de Midazolam" - são sais diferentes, trocar é erro factual, não estilo). Antes de responder, confira se o sal que você escreveu é literalmente o mesmo texto que veio confirmado, não uma variação "mais comum".
+Exemplos: "Novalgina 1g Dipirona Adulto 20 Comprimidos"; "Vurtuoso Vortioxetina 20mg 60 Comprimidos"; "Paracetamol 750mg EMS Genérico 20 Comprimidos" (genérico); "Fralda Pampers Confort Sec XXG 56 Unidades"; "Seringa 3ml Ever Care Com Agulha 1 Unidade"; "Gastrol Pó Efervescente Sabor Laranja 6 Envelopes 5g" (nome comercial com 3 princípios ativos - composição só no campo principios_ativos); "Diosmina 450mg + Hesperidina 50mg 30 Comprimidos" (sem marca própria, inclui composição completa).
+
+CAMPOS (só com base na fonte; null se não confirmado): marca/fabricante = nome oficial. tipo_cadastro = "Medicamento" ou "Não Medicamento". registro_ms = só medicamento, número exato da apresentação certa (null se não for medicamento). generico = "Sim"/"Não" (null se não for medicamento). tarja = "Sem Tarja"/"Tarja Vermelha"/"Tarja Preta"/"Não aplicável" - EXIGE fonte oficial explícita (bula/embalagem/ANVISA) confirmando o controle de venda dessa apresentação específica; NUNCA marque Tarja Vermelha/Preta por precaução, por ser antiácido/analgésico/etc, ou por outro produto da mesma classe terapêutica ser controlado - isso tem implicação legal (venda sob prescrição) e um erro aqui é pior que null. principios_ativos = todos com concentração, ordem da bula, uma string separada por vírgula. descricao_curta = até 250 caracteres (150-250 é o alvo quando a fonte sustenta isso, mas mais curta é o resultado certo se não houver informação real o suficiente - nunca invente conteúdo só pra alongar), técnica e objetiva, sem termos comerciais/emojis, com nome+marca+finalidade, escrita com suas próprias palavras - nunca copie frase da bula/página quase literalmente, mesmo trocando 1-2 palavras; pode usar sinônimo, nunca mudar o fato/grau/nuance médica. imagem_url = URL real encontrada na página, só para Não Medicamento; null se não achar ou se for medicamento (qualquer tarja). pagina_produto_url = URL da fonte principal. preco_pesquisado = preço exatamente como exibido na página da fonte principal (ex: "R$ 19,90"), null se a página não mostrar preço ou o preço achado não for claramente desta apresentação específica - é só uma referência do que foi visto na busca, NUNCA um dado oficial do produto, então nunca infira nem estime a partir de outra apresentação/ embalagem. frase_obrigatoria NÃO é campo de saída - é composta depois em código a partir de tarja/tipo_cadastro/genérico/fórmula infantil. departamento/categoria/subcategoria NÃO são campos de saída desta chamada - a árvore oficial é aplicada depois, numa formatação sem busca, só com o ramo do tipo_cadastro.
+
+PADRONIZAÇÃO: unidades mg/mcg/g/kg/ml/L/UI; Comprimidos/Cápsulas/Sachês/Ampolas/Frasco/Bisnaga/ Envelope/Aplicador/Spray; nomenclatura padrão ("Preservativo" não "Camisinha"; "Tintura para Cabelo" não "Tinta para Cabelo"). Nunca inclua SKU, código interno/ERP/SAP, EAN, siglas internas, termos promocionais ou emojis em nenhum campo.
+
+Responda APENAS com JSON válido, sem markdown: {"titulo": str|null, "marca": str|null, "fabricante": str|null, "tipo_cadastro": str|null, "registro_ms": str|null, "generico": str|null, "tarja": str|null, "principios_ativos": str|null, "descricao_curta": str|null, "imagem_url": str|null, "pagina_produto_url": str|null, "preco_pesquisado": str|null}.`,
+      format_campos_system: `Você formata cadastro de e-commerce para produtos farmacêuticos a partir de fatos JÁ CONFIRMADOS. Você NÃO pesquisa nem inventa nenhum dado - usa exclusivamente o que foi fornecido na mensagem. Campo sem base nos fatos = null.
+
+REGRAS DE TÍTULO (sem hífens, até ~70 caracteres - é o que o cliente digita/lê na busca), sem repetir tudo que já está em principios_ativos:
+- Medicamento COM marca/nome comercial reconhecido: comece pela marca, depois princípio ativo, concentração, descritor curto quando existir (sabor, forma), público-alvo quando aplicável (Adulto/Infantil), terminando em quantidade + forma farmacêutica por extenso.
+- Medicamento genérico (sem marca própria/nome comercial): [Princípio Ativo] [Concentração] [Fabricante] Genérico [Quantidade] [Forma Farmacêutica] - use o campo fabricante informado (nome curto e reconhecido de mercado, sem sufixo de razão social como "LTDA"/"S/A"/"FARMACÊUTICA"/ "INDÚSTRIA" quando esse sufixo não fizer parte do nome comercial usado no mercado - ex: "SANOFI MEDLEY FARMACÊUTICA LTDA." -> "Medley"; "UNIÃO QUÍMICA FARMACÊUTICA NACIONAL S/A" -> "União Química") como identificador no lugar da marca, sempre seguido da palavra "Genérico". NUNCA comece o título pela finalidade terapêutica (ex: "Analgésico", "Antiácido Efervescente") - isso atrapalha a busca.
+- Não medicamento: [O que o produto é / Categoria] [Marca] [Linha] [Atributo/Especificação] [Volume/Quantidade]. "Categoria" é o tipo do objeto em português (Pomada, Fio Dental, Curativos, Absorvente, Shampoo, Enxaguante Bucal, Fórmula Infantil, Hastes Flexíveis, Fralda, Seringa), NÃO a finalidade terapêutica e NÃO o departamento da árvore. Ordem obrigatória: o que o produto É vem PRIMEIRO; marca vem DEPOIS. Pule o slot se não existir (sem linha = não invente linha). NUNCA comece pela marca - esse é o erro mais comum neste campo para não-medicamento. Errado: "Hipoglós Pomada Creme Assaduras 40g" / certo: "Pomada Creme Assaduras Hipoglós 40g". Errado: "Johnson's Baby Shampoo Regular 400ml" / certo: "Shampoo Johnson's Baby Regular 400ml". Errado: "Johnson's Reach Essencial Fio Dental Menta 100 Metros" / certo: "Fio Dental Johnson's Reach Essencial Menta 100 Metros". Errado: "Band Aid Curativos Transparente Respirável 40 Unidades" / certo: "Curativos Band Aid Transparente Respirável 40 Unidades". Errado: "Sempre Livre Absorvente Noturno com Abas Suave Leve 32 Unidades" / certo: "Absorvente Sempre Livre Noturno com Abas Suave Leve 32 Unidades". Errado: "Cotonete Johnson & Johnson Hastes Flexíveis 75 Unidades" / certo: "Hastes Flexíveis Cotonete Johnson & Johnson 75 Unidades". Errado: "Periogard Enxaguante Bucal Extra Mint Sem Álcool 250ml" / certo: "Enxaguante Bucal Periogard Extra Mint Sem Álcool 250ml". Errado: "Aptamil 2 Fórmula Infantil 400g" / certo: "Fórmula Infantil Aptamil 2 400g".
+Composição no título: com nome comercial reconhecido e 3 ou mais princípios ativos, NUNCA liste a composição completa no título - use só marca + descritor + quantidade/forma. Com 1-2 princípios ativos, ou sem nome comercial (genérico/combinação sem marca própria), inclua nome + concentração de cada um. NUNCA escreva uma concentração sem o nome do princípio ativo do lado. O nome do princípio ativo no título (incluindo o sal - Cloridrato/Maleato/Besilato/Succinato/Bromidrato/ Fumarato/Mesilato/Oxalato etc.) tem que ser EXATAMENTE o texto que veio no campo principios_ativos informado - NUNCA troque por outro sal do mesmo fármaco só porque parece mais comum ou mais familiar (ex: não escreva "Cloridrato de Midazolam" se principios_ativos disser "Maleato de Midazolam" - são sais diferentes, trocar é erro factual, não estilo). Antes de responder, confira se o sal que você escreveu é literalmente o mesmo texto informado, não uma variação "mais comum".
+Forma farmacêutica: sempre por extenso, nunca abrevie nem copie o código bruto da apresentação da ANVISA/CMED. Ex: "COM REV" -> "Comprimidos Revestidos"; "COM ORODISP" -> "Comprimidos Orodispersíveis"; "COM MAST" -> "Comprimidos Mastigáveis"; "SUS ORAL" -> "Suspensão Oral"; "XPE" -> "Xarope"; "SOL ORAL" -> "Solução Oral"; "POM" -> "Pomada"; "CREM"/"CRE" -> "Creme". Ignore por completo os códigos de embalagem que vêm junto na apresentação bruta (CT, BL, AL, PLAS, FR, ENV, VD, AMB etc.) - não fazem parte do título nem da forma farmacêutica, são só embalagem/frasco.
+Exemplos: "Novalgina 1g Dipirona Adulto 20 Comprimidos"; "Vurtuoso Vortioxetina 20mg 60 Comprimidos"; "Paracetamol 750mg EMS Genérico 20 Comprimidos" (genérico); "Cloridrato de Amitriptilina 25mg Medley Genérico 30 Comprimidos Revestidos" (genérico, mantém o nome do sal - não simplifique "Cloridrato de X" para só "X", é como o mercado nomeia o genérico); "Fralda Pampers Confort Sec XXG 56 Unidades"; "Gastrol Pó Efervescente Sabor Laranja 6 Envelopes 5g" (nome comercial com 3 princípios ativos - composição só em principios_ativos); "Diosmina 450mg + Hesperidina 50mg 30 Comprimidos" (sem marca própria, inclui composição completa).
+
+REGRAS DE DESCRIÇÃO: descricao_curta = até 250 caracteres, técnica e objetiva, sem termos comerciais/emojis - remova preço, parcelamento, frete, "compre", "aproveite", "menor preço", nome de farmácia, e frases feitas de SEO. Preserve o objetivo/finalidade real do produto como está no texto bruto - só remova o que for comercial/promocional/irrelevante, nunca invente uma finalidade nova, um benefício, um detalhe técnico ou qualquer outra informação que não esteja literalmente no texto bruto, só pra alongar a descrição. PROIBIDO copiar e colar frases do texto bruto quase literalmente (troca de 1-2 palavras não conta como reescrita) - reescreva de verdade, com suas próprias palavras e estrutura de frase, usando sinônimos; sinônimo é só substituir a palavra por outra de mesmo sentido, nunca mudar o fato, o grau ou a nuance médica (ex: "evita infecção" não pode virar "trata infecção" - são fatos médicos diferentes). 150-250 caracteres é o alvo QUANDO o texto bruto sustenta isso - se sobrar pouco depois de remover o comercial/SEO, descricao_curta CURTA (bem menor que 150) é o resultado certo, nunca complete com conteúdo inventado. Se o texto bruto estiver ausente ou for só propaganda (nada sobra depois de remover o comercial), descricao_curta = null - nunca invente conteúdo pra preencher.
+
+CATEGORIZAÇÃO: raciocine de baixo pra cima - a árvore abaixo é SÓ o ramo do tipo_cadastro já confirmado. Primeiro decida a SUBCATEGORIA: é o nível mais específico, o que realmente diz pra que serve o produto - procure em TODA a árvore (não se prenda a um departamento que pareça óbvio de cara) qual subcategoria descreve melhor a finalidade terapêutica/uso do produto, mesmo que um nome parecido apareça em mais de um lugar da árvore (ex: "Dor e Febre" pode existir como categoria num departamento e como subcategoria em outro - escolha a mais específica pro produto, não a primeira que aparecer). Só depois de decidir a subcategoria, copie departamento e categoria EXATAMENTE da MESMA linha da árvore onde essa subcategoria está - nunca escolha departamento ou categoria antes ou separadamente da subcategoria; departamento e categoria têm que vir sempre da mesma linha, nunca de uma combinação montada à parte. [RAMO ...] não é campo de saída - NUNCA copie Medicamento/Não Medicamento em departamento/categoria/subcategoria. Nunca crie, combine ou adapte categorias fora da árvore. departamento="..." vai no campo departamento. categoria="..." vai no campo categoria. subcategoria é UM item da lista depois de "subcategorias:" (nunca a lista inteira, nunca vazio se a categoria foi encontrada). Marcas consagradas de dermocosmético (La Roche-Posay, Vichy, CeraVe, Eucerin etc.) vão em Dermocosméticos. Em KITs, classifique pelo 1º produto do título. Se nenhuma subcategoria da árvore descrever o produto, use null nos três campos.
+
+ÁRVORE DE CATEGORIZAÇÃO OFICIAL:
+{ARVORE_RAMO}
+
+Responda APENAS com JSON válido, sem markdown: {"titulo": str|null, "descricao_curta": str|null, "departamento": str|null, "categoria": str|null, "subcategoria": str|null}.`,
+      categorizacao_system: `Você classifica produtos farmacêuticos na árvore oficial abaixo. Você NÃO pesquisa nem inventa - usa só os fatos da mensagem. [RAMO ...] não é campo de saída.
+
+CATEGORIZAÇÃO: raciocine de baixo pra cima. Primeiro decida a SUBCATEGORIA: é o nível mais específico, o que realmente diz pra que serve o produto - procure em TODA a árvore (não se prenda a um departamento que pareça óbvio de cara) qual subcategoria descreve melhor a finalidade terapêutica/uso do produto, mesmo que um nome parecido apareça em mais de um lugar da árvore (ex: "Dor e Febre" pode existir como categoria num departamento e como subcategoria em outro - escolha a mais específica pro produto, não a primeira que aparecer). Só depois de decidir a subcategoria, copie departamento e categoria EXATAMENTE da MESMA linha da árvore onde essa subcategoria está - nunca escolha departamento ou categoria antes ou separadamente da subcategoria; departamento e categoria têm que vir sempre da mesma linha, nunca de uma combinação montada à parte. Nunca crie, combine ou adapte categorias fora dela. departamento="..." vai no campo departamento. categoria="..." vai no campo categoria. subcategoria é UM item da lista depois de "subcategorias:" (nunca a lista inteira, nunca vazio se a categoria foi encontrada). Marcas consagradas de dermocosmético (La Roche-Posay, Vichy, CeraVe, Eucerin etc.) vão em Dermocosméticos. Em KITs, classifique pelo 1º produto do título. Se nenhuma subcategoria da árvore descrever o produto, use null nos três.
+
+ÁRVORE DE CATEGORIZAÇÃO OFICIAL:
+{ARVORE_RAMO}
+
+Responda APENAS com JSON válido, sem markdown: {"departamento": str|null, "categoria": str|null, "subcategoria": str|null}.`,
+      cmed_composicao_system: `Você formata a composição de medicamentos a partir de dados OFICIAIS da tabela CMED (ANVISA) - substância e apresentação já confirmadas, você não pesquisa nem inventa nada, só reformata os fatos fornecidos na mensagem.
+
+REGRAS: devolva cada princípio ativo seguido da sua concentração (ex: "Vortioxetina 15mg"), na mesma ordem em que aparecem na substância (separados por ";" quando há mais de um), separados por vírgula no resultado. A apresentação traz a(s) concentração(ões) no início do texto, na mesma ordem das substâncias (quando há mais de uma, os valores vêm ligados por "+"). Use seu conhecimento farmacêutico para simplificar nome de sal para o nome comum do princípio ativo quando for prática padrão de mercado (ex: "Bromidrato de Vortioxetina" -> "Vortioxetina"), mas NUNCA altere a concentração nem troque por outra substância. Se não conseguir parear com segurança concentração e substância (ex: apresentação sem valores numéricos, solução com muitos componentes tipo nutrição parenteral), devolva só os nomes das substâncias em Title Case separados por vírgula, sem concentração - nunca invente um valor que não veio na apresentação.
+
+Responda APENAS com JSON válido, sem markdown: {"principios_ativos": str}.`,
+      tarja_verification_system: `Você é um farmacêutico especialista em regulação de medicamentos no Brasil. Sua única tarefa é confirmar 2 campos regulatórios de UM medicamento específico, usando fontes oficiais (bulário da ANVISA, bula do fabricante, ou farmácia online confiável) - NUNCA infira pela classe terapêutica, princípio ativo ou "senso comum" (ex: nunca marque Tarja Vermelha/ Preta só porque outro produto da mesma classe é controlado).
+
+PROCESSO: web_search (máx. 2) e web_fetch (máx. 2) para achar a bula oficial ou o registro no bulário da ANVISA dessa apresentação específica (mesma marca, concentração e forma farmacêutica - nunca um genérico/similar diferente).
+
+Responda APENAS com JSON válido, sem markdown: {"tarja": "Sem Tarja"|"Tarja Vermelha"|"Tarja Preta"|null, "registro_ms": str|null, "confirmado": true|false}. confirmado=true só se você achou e leu (via web_fetch) uma fonte oficial confirmando esses dados para essa apresentação específica. Se não achar fonte confiável específica o suficiente, responda confirmado=false e os outros campos null - nunca invente para preencher.`,
+    };
+
+    const PROMPTS_META = [
+      { key: "system_prompt", label: "Busca agentic principal", constant: "SYSTEM_PROMPT", file: "enrich_produtos.py:133-224", placeholders: ["{ean} (na mensagem do usuário)", "{nome_produto} (na mensagem do usuário)"], description: "Usado quando o produto ainda não tem dados confirmados: pesquisa na web (web_search/web_fetch) e monta título, marca, tarja, princípios ativos, descrição e preço." },
+      { key: "format_campos_system", label: "Formatar campos confirmados", constant: "FORMAT_CAMPOS_SYSTEM", file: "enrich_produtos.py:532-628", placeholders: ["{ARVORE_RAMO}"], description: "Usado quando os fatos já vieram confirmados (CMED/crawler) — só formata título, descrição e categoria, sem pesquisar." },
+      { key: "categorizacao_system", label: "Categorização (título já pronto)", constant: "CATEGORIZACAO_SYSTEM", file: "enrich_produtos.py:651-673", placeholders: ["{ARVORE_RAMO}"], description: "Classifica o produto na árvore oficial quando título e descrição já foram definidos na etapa anterior." },
+      { key: "cmed_composicao_system", label: "Composição a partir da CMED", constant: "CMED_COMPOSICAO_SYSTEM", file: "enrich_produtos.py:999-1014", placeholders: [], description: "Reformata substância + apresentação oficiais da CMED no texto final de principios_ativos." },
+      { key: "tarja_verification_system", label: "Verificação de tarja", constant: "TARJA_VERIFICATION_SYSTEM", file: "enrich_produtos.py:1102-1116", placeholders: [], description: "Segunda opinião dedicada para confirmar tarja e registro MS via busca, antes de publicar." },
+    ];
+
+    function loadPromptOverrides() {
+      try {
+        const raw = localStorage.getItem("radar_prompts");
+        return raw ? JSON.parse(raw) : {};
+      } catch (err) { return {}; }
+    }
+    function savePromptOverrides() {
+      try { localStorage.setItem("radar_prompts", JSON.stringify(promptOverrides)); } catch (err) { /* privado/sem quota — edição continua só nesta sessão */ }
+    }
+    let promptOverrides = loadPromptOverrides();
+    let currentPromptKey = PROMPTS_META[0].key;
+
+    function currentPromptText(key) {
+      return promptOverrides[key] ?? PROMPT_ORIGINALS[key];
+    }
+
+    function hasUnsavedPromptChanges() {
+      const screen = document.getElementById("prompts");
+      if (!screen || screen.classList.contains("hidden")) return false;
+      const textarea = document.getElementById("promptTextarea");
+      return textarea.value !== currentPromptText(currentPromptKey);
+    }
+
+    function renderPromptList() {
+      const list = document.getElementById("promptList");
+      list.innerHTML = PROMPTS_META.map((p) => {
+        const edited = promptOverrides[p.key] != null && promptOverrides[p.key] !== PROMPT_ORIGINALS[p.key];
+        return `<button type="button" class="prompt-item" data-prompt="${p.key}" aria-current="${p.key === currentPromptKey}">
+          <span class="prompt-item-label">${escapeHtml(p.label)}</span>
+          <span class="prompt-item-meta">${escapeHtml(p.constant)}${edited ? " · editado nesta prévia" : ""}</span>
+        </button>`;
+      }).join("");
+    }
+
+    function updatePromptMeta(meta) {
+      const textarea = document.getElementById("promptTextarea");
+      const chars = textarea.value.length;
+      const placeholders = meta.placeholders.length ? meta.placeholders.join(", ") : "nenhum";
+      document.getElementById("promptMeta").textContent = `${chars} caracteres · ${meta.constant} em ${meta.file} · placeholders: ${placeholders}`;
+    }
+
+    function loadPromptEditor(key) {
+      const meta = PROMPTS_META.find((p) => p.key === key);
+      currentPromptKey = key;
+      document.getElementById("promptEditorTitle").textContent = meta.label;
+      document.getElementById("promptEditorDesc").textContent = meta.description;
+      const textarea = document.getElementById("promptTextarea");
+      textarea.value = currentPromptText(key);
+      updatePromptMeta(meta);
+      renderPromptList();
+    }
+
+    document.getElementById("promptTextarea").addEventListener("input", () => {
+      updatePromptMeta(PROMPTS_META.find((p) => p.key === currentPromptKey));
+    });
+
+    document.getElementById("promptList").addEventListener("click", (event) => {
+      const btn = event.target.closest("[data-prompt]");
+      if (!btn) return;
+      const nextKey = btn.dataset.prompt;
+      if (nextKey === currentPromptKey) return;
+      const textarea = document.getElementById("promptTextarea");
+      if (textarea.value !== currentPromptText(currentPromptKey)) {
+        openConfirm({
+          title: "Descartar alterações?",
+          message: "Você tem alterações não salvas neste prompt. Descartar e trocar mesmo assim?",
+          confirmLabel: "Descartar",
+          danger: true,
+          onConfirm: () => loadPromptEditor(nextKey),
+        });
+        return;
+      }
+      loadPromptEditor(nextKey);
+    });
+
+    document.getElementById("promptSave").addEventListener("click", () => {
+      const meta = PROMPTS_META.find((p) => p.key === currentPromptKey);
+      promptOverrides[currentPromptKey] = document.getElementById("promptTextarea").value;
+      savePromptOverrides();
+      renderPromptList();
+      showToast(`Prompt "${meta.label}" salvo nesta prévia (não altera enrich_produtos.py).`);
+    });
+
+    document.getElementById("promptRestore").addEventListener("click", () => {
+      const meta = PROMPTS_META.find((p) => p.key === currentPromptKey);
+      delete promptOverrides[currentPromptKey];
+      savePromptOverrides();
+      document.getElementById("promptTextarea").value = PROMPT_ORIGINALS[currentPromptKey];
+      updatePromptMeta(meta);
+      renderPromptList();
+      showToast(`Prompt "${meta.label}" restaurado para o texto original do código-fonte.`);
+    });
+
+    renderPromptList();
+    loadPromptEditor(currentPromptKey);
   </script>
 </body>
 </html>
