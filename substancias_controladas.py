@@ -17,13 +17,8 @@ import re
 
 import psycopg2
 
-DB_CONFIG = {
-    "host": os.environ.get("PG_HOST", "localhost"),
-    "port": os.environ.get("PG_PORT", "5433"),
-    "user": os.environ.get("PG_USER", "cadastro"),
-    "password": os.environ.get("PG_PASSWORD", "cadastro"),
-    "dbname": os.environ.get("PG_DB", "cadastro_produtos"),
-}
+from pipeline.db import dsn as _dsn
+
 
 # substâncias que aparecem numa lista de controle da Portaria 344, mas cujo
 # próprio ADENDO da lista isenta explicitamente de retenção (texto oficial:
@@ -36,7 +31,7 @@ EXCECOES_SEM_RETENCAO = {"carisoprodol", "loperamida"}
 
 
 def conectar():
-    return psycopg2.connect(**DB_CONFIG)
+    return psycopg2.connect(**_dsn())
 
 
 def _normalizar(texto):

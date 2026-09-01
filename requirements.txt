@@ -10,3 +10,4 @@ httpx
 Pillow
 requests
 pypdf
+pytest

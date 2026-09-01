@@ -18,13 +18,8 @@ import psycopg2
 from cmed import normalizar_ean
 from dominios import ORIGEM_ABCFARMA
 
-DB_CONFIG = {
-    "host": os.environ.get("PG_HOST", "localhost"),
-    "port": os.environ.get("PG_PORT", "5433"),
-    "user": os.environ.get("PG_USER", "cadastro"),
-    "password": os.environ.get("PG_PASSWORD", "cadastro"),
-    "dbname": os.environ.get("PG_DB", "cadastro_produtos"),
-}
+from pipeline.db import dsn as _dsn
+
 
 CAMPOS = (
     "codigo_produto", "ean", "descricao_produto", "apresentacao",
@@ -34,7 +29,7 @@ CAMPOS = (
 
 
 def conectar():
-    return psycopg2.connect(**DB_CONFIG)
+    return psycopg2.connect(**_dsn())
 
 
 # evita imprimir o mesmo aviso de "tabela não existe" uma vez por EAN quando

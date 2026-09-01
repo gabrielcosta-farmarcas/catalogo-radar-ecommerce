@@ -160,28 +160,15 @@ ADAPTERS_EM_ORDEM = [
     AraujoAdapter(),
 ]
 
-# campos que, se vierem de pelo menos um site, indicam um match confiável o
-# bastante pra não precisar do Claude - sem eles (ex: só nome + imagem, caso
-# de araujo) não dá pra confiar no produto certo foi encontrado
-CAMPOS_CONFIANCA = ("ms_register", "active_ingredient")
-
-# "ms_register" às vezes vem preenchido com um texto de placeholder em vez
-# de um registro de verdade (produto não-medicamento, isento de registro na
-# ANVISA) - sem filtrar isso, o valor era tratado como "achou registro_ms" e
-# classificava sabonete/esmalte/meia como Medicamento por engano, o que
-# também derrubava a imagem (zerada pra medicamento).
-REGISTRO_MS_PLACEHOLDERS = {
-    "ISENTO", "N/A", "NA", "NAO SE APLICA", "NÃO SE APLICA",
-    "NAO POSSUI", "NÃO POSSUI", "-", "0", "",
-}
-
-
-def _registro_ms_valido(valor):
-    if not valor:
-        return None
-    if str(valor).strip().upper() in REGISTRO_MS_PLACEHOLDERS:
-        return None
-    return valor
+from pipeline.classify import (
+    CAMPOS_CONFIANCA,
+    FONTES_MINIMAS_SEM_CAMPOS_REGULATORIOS,
+    REGISTRO_MS_PLACEHOLDERS,
+    eh_confiavel,
+    indica_medicamento as _indica_medicamento,
+    nomes_concordam as _nomes_concordam,
+    registro_ms_valido as _registro_ms_valido,
+)
 
 
 def _consolidar_resultados(ean, brutos):
@@ -299,80 +286,6 @@ def buscar_no_crawler(
     return _consolidar_resultados(ean, brutos)
 
 
-# nº mínimo de sites concordando no nome pra aceitar produto sem
-# registro_ms/princípio_ativo (não-medicamento nunca tem esses campos) -
-# concordância entre fontes independentes é o sinal de confiança nesse caso
-FONTES_MINIMAS_SEM_CAMPOS_REGULATORIOS = 2
-
-
-def _nomes_concordam(nomes):
-    """True se pelo menos 2 nomes batem (um contém o outro ou similaridade
-    de sequência >= 0.55). Nomes demais divergentes = outro produto."""
-    chaves = []
-    for nome in nomes:
-        chave = re.sub(r"\s+", " ", (nome or "")).strip().upper()
-        if chave:
-            chaves.append(chave)
-    if len(chaves) < 2:
-        return False
-    base = chaves[0]
-    for outro in chaves[1:]:
-        if base in outro or outro in base:
-            continue
-        if difflib.SequenceMatcher(None, base, outro).ratio() < 0.55:
-            return False
-    return True
-
-
-def eh_confiavel(resultado, fontes):
-    """
-    Medicamento: exige registro_ms ou princípio_ativo (campos que só site com
-    ficha técnica farmacêutica de verdade expõe). Não-medicamento nunca tem
-    esses campos, então usa como sinal de confiança 2+ sites com EAN
-    conferido E nomes parecidos - se fosse medicamento de verdade, pelo
-    menos um deles teria mostrado registro_ms. Sem conferir EAN/nome, dois
-    "primeiros resultados" de busca (Araujo/Panvel) fechavam o cadastro
-    errado.
-    """
-    if any(resultado.get(c) for c in CAMPOS_CONFIANCA):
-        return True
-    conferidos = resultado.get("_fontes_ean_conferido") or []
-    if len(conferidos) < FONTES_MINIMAS_SEM_CAMPOS_REGULATORIOS:
-        return False
-    return _nomes_concordam(resultado.get("_nomes") or [])
-
-
-# categoria/breadcrumb do site (campo "category" do crawler) indicando que o
-# produto está na seção de remédios da farmácia - sinal de tipo_cadastro mais
-# confiável que vasculhar a descrição livre: description menciona a palavra
-# "medicamento" até em produto que NÃO é medicamento (ex: seringa descrita
-# como "para aplicação de medicamentos", espaçador de bombinha, hastes
-# flexíveis "para aplicação de medicamentos e remoção de maquiagem" - visto
-# em produtos reais), então usar isso derrubaria a precisão em vez de
-# melhorar. category já é o próprio site dizendo em que prateleira o produto
-# está, não uma menção incidental.
-_CATEGORIA_INDICA_MEDICAMENTO_RE = re.compile(r"rem[eé]dio|medicamento", re.IGNORECASE)
-
-
-def _indica_medicamento(resultado):
-    """
-    True se o crawler achou algum sinal de que o produto é medicamento, mesmo
-    quando ms_register não veio exposto no HTML (acontece bastante - visto em
-    Sigmaliv/Desloratadina, Paracetamol e Fluibron/Ambroxol, todos raspados
-    com sucesso mas sem ms_register, e por isso classificados como "Não
-    Medicamento" antes desta checagem existir). active_ingredient e tarja já
-    eram o mesmo sinal de confiança usado em eh_confiavel (CAMPOS_CONFIANCA).
-    prescricao_detalhe (exigência de receita) e category (breadcrumb do
-    site, ex: "Remédios") só vêm preenchidos pelo site quando o produto está
-    cadastrado como medicamento na loja - nenhum dos dois era usado até
-    agora, apesar de já vir raspado pelos adapters.
-    """
-    if any(
-        resultado.get(c)
-        for c in ("ms_register", "active_ingredient", "tarja", "prescricao_detalhe")
-    ):
-        return True
-    return bool(_CATEGORIA_INDICA_MEDICAMENTO_RE.search(resultado.get("category") or ""))
 
 
 def mapear_para_schema(resultado, fontes, client, model):
@@ -749,26 +662,12 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
     # propósito (mesma ordem de ep.call_model): senão a regra "tarja sem
     # pagina_produto_url é zerada" descartaria o valor recém-confirmado antes
     # mesmo dele ser usado, já que essa verificação dedicada não retorna URL.
-    if verify_tarja and not data.get("tarja"):
-        resultado_verif, usage_verif = ep.verify_tarja_registro(
-            client, model, ean, data.get("titulo"), data.get("marca"), principios_ativos
-        )
-        usage["tokens"] += usage_verif["tokens"]
-        usage["cache_creation"] += usage_verif["cache_creation"]
-        usage["cache_read"] += usage_verif["cache_read"]
-
-        if resultado_verif and resultado_verif.get("confirmado"):
-            tarja_verificada = resultado_verif.get("tarja")
-            if tarja_verificada is not None and tarja_verificada not in ep.ALLOWED_TARJA:
-                print(
-                    f"  [aviso] verificação dedicada devolveu tarja fora do "
-                    f"vocabulário para EAN {ean} ({tarja_verificada!r}) - zerada."
-                )
-                tarja_verificada = None
-            data["tarja"] = tarja_verificada
-            # frase_obrigatoria depende da tarja - recompõe com o valor
-            # atualizado, mesma função usada em todo o resto do fluxo
-            data["frase_obrigatoria"] = ep.compor_frase_obrigatoria(data, tarja_verificada, True)
+    from pipeline.tarja import confirmar_tarja_se_ausente
+    data, usage = confirmar_tarja_se_ausente(
+        data, ean, client, model, principios_ativos, usage,
+        verify_tarja=verify_tarja,
+        atualizar_registro_ms=False,
+    )
     return ep.marcar_validacao_humana(data), usage
 
 
@@ -919,26 +818,12 @@ def mapear_tarjados_para_schema(item, ean, client, model, verify_tarja=True):
     # tentativa via busca dedicada, mesma função e mesmo critério do fluxo
     # ABCFarma/IQVIA. Roda DEPOIS de apply_safety_checks de propósito (mesma
     # ordem dos outros caminhos).
-    if eh_medicamento_final and verify_tarja and not data.get("tarja"):
-        resultado_verif, usage_verif = ep.verify_tarja_registro(
-            client, model, ean, data.get("titulo"), data.get("marca"), principios_ativos
-        )
-        usage["tokens"] += usage_verif["tokens"]
-        usage["cache_creation"] += usage_verif["cache_creation"]
-        usage["cache_read"] += usage_verif["cache_read"]
-
-        if resultado_verif and resultado_verif.get("confirmado"):
-            tarja_verificada = resultado_verif.get("tarja")
-            if tarja_verificada is not None and tarja_verificada not in ep.ALLOWED_TARJA:
-                print(
-                    f"  [aviso] verificação dedicada devolveu tarja fora do "
-                    f"vocabulário para EAN {ean} ({tarja_verificada!r}) - zerada."
-                )
-                tarja_verificada = None
-            data["tarja"] = tarja_verificada
-            if not data.get("registro_ms"):
-                data["registro_ms"] = resultado_verif.get("registro_ms")
-            data["frase_obrigatoria"] = ep.compor_frase_obrigatoria(data, tarja_verificada, True)
+    from pipeline.tarja import confirmar_tarja_se_ausente
+    data, usage = confirmar_tarja_se_ausente(
+        data, ean, client, model, principios_ativos, usage,
+        verify_tarja=verify_tarja and eh_medicamento_final,
+        atualizar_registro_ms="if_empty",
+    )
 
     data = ep.marcar_validacao_humana(data)
     if tipo_ambiguo:
@@ -1123,26 +1008,12 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
     # crawler) - última tentativa via busca dedicada, mesma função e mesmo
     # critério do fluxo ABCFarma/Claude puro. Roda DEPOIS de
     # apply_safety_checks de propósito (mesma ordem do caminho ABCFarma).
-    if precisa_receita is True and verify_tarja and not data.get("tarja"):
-        resultado_verif, usage_verif = ep.verify_tarja_registro(
-            client, model, ean, data.get("titulo"), data.get("marca"), principios_ativos
-        )
-        usage["tokens"] += usage_verif["tokens"]
-        usage["cache_creation"] += usage_verif["cache_creation"]
-        usage["cache_read"] += usage_verif["cache_read"]
-
-        if resultado_verif and resultado_verif.get("confirmado"):
-            tarja_verificada = resultado_verif.get("tarja")
-            if tarja_verificada is not None and tarja_verificada not in ep.ALLOWED_TARJA:
-                print(
-                    f"  [aviso] verificação dedicada devolveu tarja fora do "
-                    f"vocabulário para EAN {ean} ({tarja_verificada!r}) - zerada."
-                )
-                tarja_verificada = None
-            data["tarja"] = tarja_verificada
-            if not data.get("registro_ms"):
-                data["registro_ms"] = resultado_verif.get("registro_ms")
-            data["frase_obrigatoria"] = ep.compor_frase_obrigatoria(data, tarja_verificada, True)
+    from pipeline.tarja import confirmar_tarja_se_ausente
+    data, usage = confirmar_tarja_se_ausente(
+        data, ean, client, model, principios_ativos, usage,
+        verify_tarja=verify_tarja and precisa_receita is True,
+        atualizar_registro_ms="if_empty",
+    )
     return ep.marcar_validacao_humana(data), usage
 
 
@@ -1177,81 +1048,8 @@ def _avisar(args, etapa, mensagem):
 
 
 def worker(ean, nome_produto, args):
-    usage_total = {"tokens": 0, "cache_creation": 0, "cache_read": 0}
-
-    _avisar(args, "cmed", "Consultando CMED/ANVISA")
-    medicamento_cmed = cmed.buscar_medicamento_anvisa(ean)
-    if medicamento_cmed is not None:
-        _avisar(args, "formatacao", "Formatando dados da CMED")
-        data, usage = mapear_cmed_para_schema(medicamento_cmed, ean, CLIENT, args.model)
-        return ean, nome_produto, data, usage
-
-    _avisar(args, "abcfarma", "Consultando ABCFarma")
-    medicamento_abcfarma = abcfarma.buscar_medicamento_abcfarma(ean)
-    if medicamento_abcfarma is not None:
-        _avisar(args, "formatacao", "Formatando dados da ABCFarma")
-        data, usage = mapear_abcfarma_para_schema(
-            medicamento_abcfarma,
-            ean,
-            CLIENT,
-            args.model,
-            verify_tarja=not args.sem_verificar_tarja,
-        )
-        return ean, nome_produto, data, usage
-
-    _avisar(args, "tarjados", "Consultando base de Tarjados")
-    item_tarjado = tarjados.buscar_produto_tarjado(ean)
-    if item_tarjado is not None:
-        _avisar(args, "formatacao", "Formatando dados da base de Tarjados")
-        data, usage = mapear_tarjados_para_schema(
-            item_tarjado,
-            ean,
-            CLIENT,
-            args.model,
-            verify_tarja=not args.sem_verificar_tarja,
-        )
-        return ean, nome_produto, data, usage
-
-    _avisar(args, "iqvia", "Consultando IQVIA")
-    produto_iqvia = iqvia.buscar_produto_iqvia(ean)
-    if produto_iqvia is not None:
-        _avisar(args, "formatacao", "Formatando dados da IQVIA")
-        data, usage = mapear_iqvia_para_schema(
-            produto_iqvia,
-            ean,
-            CLIENT,
-            args.model,
-            verify_tarja=not args.sem_verificar_tarja,
-        )
-        return ean, nome_produto, data, usage
-
-    _avisar(args, "crawler", "Buscando em farmácias")
-    resultado, fontes = buscar_no_crawler(ean)
-
-    if eh_confiavel(resultado, fontes):
-        _avisar(args, "formatacao", "Formatando dados do crawler")
-        data, usage = mapear_para_schema(resultado, fontes, CLIENT, args.model)
-        return ean, nome_produto, data, usage
-
-    _avisar(args, "claude", "Buscando com Claude (pode demorar)")
-    time.sleep(args.sleep)
-    data, usage_claude = ep.call_model(
-        CLIENT,
-        args.model,
-        ean,
-        nome_produto,
-        verify_images=args.verify_images,
-        verify_tarja=not args.sem_verificar_tarja,
-        pistas_nao_confirmadas=montar_pistas_nao_confirmadas(resultado, fontes),
-    )
-    for chave in usage_total:
-        usage_total[chave] += usage_claude[chave]
-    if data is not None:
-        data["origem_enriquecimento"] = ORIGEM_CLAUDE
-        data["origem_referencia"] = None
-        data["confirmado_anvisa_cmed"] = False
-        data = ep.marcar_validacao_humana(data)
-    return ean, nome_produto, data, usage_total
+    from pipeline.orchestrator import run
+    return run(ean, nome_produto, args, CLIENT)
 
 
 def worker_reconciliar(ean, nome_produto, args):

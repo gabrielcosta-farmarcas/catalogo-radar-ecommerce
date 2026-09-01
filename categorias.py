@@ -19,19 +19,14 @@ import psycopg2.extras
 
 from dominios import nome_tipo_produto
 
-DB_CONFIG = {
-    "host": os.environ.get("PG_HOST", "localhost"),
-    "port": os.environ.get("PG_PORT", "5433"),
-    "user": os.environ.get("PG_USER", "cadastro"),
-    "password": os.environ.get("PG_PASSWORD", "cadastro"),
-    "dbname": os.environ.get("PG_DB", "cadastro_produtos"),
-}
+from pipeline.db import dsn as _dsn
+
 
 _INDICE = None
 
 
 def conectar():
-    return psycopg2.connect(**DB_CONFIG)
+    return psycopg2.connect(**_dsn())
 
 
 def _linha_ativa_sql():

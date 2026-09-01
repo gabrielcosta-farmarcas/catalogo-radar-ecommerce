@@ -311,116 +311,8 @@ MENSAGEM_VALIDACAO_TARJADOS_TIPO_AMBIGUO = (
 
 
 def marcar_validacao_humana(data):
-    """
-    Medicamento achado só na web (origem claude) precisa de revisão humana
-    antes de ir ao ar - fonte não rastreável nenhum campo. Medicamento
-    confirmado pela ABCFarma (que não tem coluna de tarja - ver
-    ORIGEM_ABCFARMA), pela base de Tarjados (que só diz RX/CONTROLADO/NÃO
-    INFORMADO, sem distinguir Vermelha de Preta - ver ORIGEM_TARJADOS) ou
-    pela IQVIA como "RX" (mesma limitação - ver ORIGEM_IQVIA) só entra na
-    fila se a tarja continuar sem confirmação depois das tentativas via
-    crawler/busca dedicada (ver mapear_abcfarma_para_schema/
-    mapear_tarjados_para_schema/mapear_iqvia_para_schema em
-    enrich_com_crawler.py) - se o bulário (Sara) confirmar a tarja, o resto
-    dos campos já vem da fonte e a linha segue o fluxo normal. Tarja só de
-    farmácia (não Sara) também entra na fila: o modelo/site já inferiu tarja
-    errada antes. Medicamento IQVIA classificado como "MIP" (Medicamento
-    Isento de Prescrição - categoria regulatória oficial, não inferência de
-    site) tem a tarja confirmada direto (ver tarja_confirmada_iqvia_mip) e
-    não entra na fila só por causa disso. CMED e crawler com tarja do Sara
-    seguem o fluxo normal. Não-medicamento nunca entra na fila, seja qual for
-    a origem.
-    """
-    if not data:
-        return data
-    origem = origem_codigo(data) or ORIGEM_CLAUDE
-    so_web = origem == ORIGEM_CLAUDE
-    so_cmed = origem == ORIGEM_ANVISA_CMED
-    so_abcfarma = origem == ORIGEM_ABCFARMA
-    so_tarjados = origem == ORIGEM_TARJADOS
-    so_iqvia = origem == ORIGEM_IQVIA
-    so_crawler = origem == ORIGEM_CRAWLER
-    medicamento = eh_medicamento(data)
-    # .get, não .pop: salvar_resultado chama marcar_validacao_humana de novo
-    # antes de gravar (revalidação defensiva), então essas chaves precisam
-    # sobreviver a mais de uma chamada - nunca vazam pro banco de qualquer
-    # forma, porque salvar_resultado/registrar_versao_historico só leem
-    # colunas explícitas de `data`, nunca o dict inteiro.
-    motivo_categoria_invalida = data.get("_categorizacao_invalida")
-    suspeita_suplemento_abcfarma = data.get("_suspeita_suplemento_abcfarma", False)
-    tarja_bulario = eh_verdadeiro(data.get("tarja_confirmada_bulario"))
-    tarja_mip_iqvia = eh_verdadeiro(data.get("tarja_confirmada_iqvia_mip"))
-    if medicamento and so_web:
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CLAUDE_MEDICAMENTO
-    elif medicamento and so_cmed and not data.get("tarja"):
-        # CMED confirmou o medicamento mas não informou a tarja (campo
-        # "- (*)") - ver mapear_cmed_para_schema em enrich_com_crawler.py,
-        # que já não tenta cruzar com substancias_controladas nesse caso
-        # (sem saber a cor da tarja, não dá pra confiar na retenção também)
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CMED_TARJA
-    elif medicamento and so_abcfarma and not data.get("tarja"):
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_ABCFARMA_TARJA
-    elif medicamento and so_tarjados and not data.get("tarja"):
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_TARJADOS_TARJA
-    elif medicamento and so_iqvia and not data.get("tarja"):
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_IQVIA_TARJA
-    elif medicamento and so_abcfarma and not tarja_bulario:
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CRAWLER_TARJA
-    elif medicamento and so_tarjados and not tarja_bulario:
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CRAWLER_TARJA
-    elif medicamento and so_iqvia and not (tarja_bulario or tarja_mip_iqvia):
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CRAWLER_TARJA
-    elif medicamento and so_crawler and (not data.get("tarja") or not tarja_bulario):
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = MENSAGEM_VALIDACAO_CRAWLER_TARJA
-    else:
-        data[VALIDACAO_HUMANA_COLUMN] = False
-        data[MENSAGEM_VALIDACAO_COLUMN] = None
-
-    # categorização zerada por validar_categorizacao (apply_safety_checks) -
-    # entra na fila mesmo quando a tarja já está confirmada (motivo
-    # independente), combinando com a mensagem de tarja se as duas se
-    # aplicarem. Só pra medicamento, mesma regra do restante da função -
-    # não-medicamento nunca entra na fila.
-    if medicamento and motivo_categoria_invalida:
-        mensagem_categoria = (
-            "VALIDAÇÃO HUMANA OBRIGATÓRIA: categorização não confere com a "
-            f"árvore oficial ({motivo_categoria_invalida}) - revisar "
-            "departamento/categoria/subcategoria antes de publicar no "
-            "e-commerce."
-        )
-        mensagem_atual = data.get(MENSAGEM_VALIDACAO_COLUMN)
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = (
-            f"{mensagem_atual} | {mensagem_categoria}" if mensagem_atual else mensagem_categoria
-        )
-
-    # ABCFarma com tipo_medicamento="OUTROS" e registro_ms vazio/RDC de
-    # suplemento (ver mapear_abcfarma_para_schema) - pode ser suplemento
-    # alimentar cadastrado como medicamento na fonte, não uma classificação
-    # confiável. Combina com as mensagens acima em vez de substituir.
-    if medicamento and suspeita_suplemento_abcfarma:
-        mensagem_suplemento = (
-            "VALIDAÇÃO HUMANA OBRIGATÓRIA: fonte ABCFarma classifica este "
-            "item como tipo_medicamento=\"OUTROS\" sem registro_ms de "
-            "medicamento (vazio ou citação de RDC de suplemento alimentar) - "
-            "confirmar se é medicamento de verdade ou suplemento alimentar "
-            "antes de publicar no e-commerce."
-        )
-        mensagem_atual = data.get(MENSAGEM_VALIDACAO_COLUMN)
-        data[VALIDACAO_HUMANA_COLUMN] = True
-        data[MENSAGEM_VALIDACAO_COLUMN] = (
-            f"{mensagem_atual} | {mensagem_suplemento}" if mensagem_atual else mensagem_suplemento
-        )
-    return data
+    from pipeline.safety.human_review import marcar_validacao_humana as _marcar
+    return _marcar(data)
 
 
 def system_cached(texto):
@@ -673,19 +565,25 @@ Responda APENAS com JSON válido, sem markdown: {"titulo": str|null, "descricao_
 "departamento": str|null, "categoria": str|null, "subcategoria": str|null}."""
 
 
-def _montar_format_system(arvore):
-    return FORMAT_CAMPOS_SYSTEM.replace("{ARVORE_RAMO}", arvore or "")
+def _montar_format_system(arvore, tipo=None):
+    if tipo is None:
+        template = FORMAT_CAMPOS_SYSTEM
+    else:
+        from pipeline.policies.base import policy_for
+        template = policy_for(tipo).format_system_template()
+    return template.replace("{ARVORE_RAMO}", arvore or "")
 
 
 # um bloco cacheado por ramo - tipo_cadastro já é conhecido nessas chamadas,
 # então não manda o outro ramo. o Claude puro de busca também não leva a
 # árvore: depois da busca, categorizar_apos_busca usa só o ramo do tipo.
+# MED/NMED usam o pack do tipo; tipo None (legado) mantém o prompt misto.
 FORMAT_SYSTEM_BLOCKS = {
-    tipo: system_cached(_montar_format_system(arvore))
+    tipo: system_cached(_montar_format_system(arvore, tipo))
     for tipo, arvore in ARVORES_POR_RAMO.items()
 }
 FORMAT_SYSTEM_BLOCKS[None] = system_cached(
-    _montar_format_system(ARVORE_CATEGORIZACAO or "")
+    _montar_format_system(ARVORE_CATEGORIZACAO or "", None)
 )
 
 # só categorização - sem regras de título/descrição. usada depois da busca
@@ -942,103 +840,13 @@ def categorizar_apos_busca(
     return data, usage
 
 
-_SUFIXOS_HIDRATACAO = (
-    " MONOIDRATADA",
-    " MONOIDRATADO",
-    " DI-HIDRATADA",
-    " DI-HIDRATADO",
-    " DIHIDRATADA",
-    " DIHIDRATADO",
-    " HEMI-HIDRATADO",
-    " HEMIHIDRATADO",
-    " TRI-HIDRATADO",
-    " ANIDRO",
-    " ANIDRA",
+from pipeline.composition import (
+    parsear_composicao_cmed,
+    normalizar_nome_substancia_cmed,
+    split_substancias_cmed as _split_substancias_cmed,
+    nome_principio_cmed as _nome_principio_cmed,
+    concentracoes_apresentacao_cmed as _concentracoes_apresentacao_cmed,
 )
-_PALAVRAS_PEQUENAS = {"DE", "DA", "DO", "DAS", "DOS", "E"}
-_CONC_CMED_RE = re.compile(
-    r"^\s*(\d+(?:[.,]\d+)?)\s*(MCG|MG|G|ML|L|UI|MUI|%)(?:\s*/\s*(ML|G|L))?\s*(?:\+\s*)?",
-    re.IGNORECASE,
-)
-
-
-def _split_substancias_cmed(substancia):
-    return [s.strip() for s in (substancia or "").split(";") if s.strip()]
-
-
-def normalizar_nome_substancia_cmed(bruto):
-    """
-    Normaliza um nome de substância/produto da CMED pra comparação:
-    maiúsculas, espaços colapsados, sem sufixo de estado de hidratação
-    (di-hidratado, anidro etc. - ver _SUFIXOS_HIDRATACAO). Público porque
-    também é usado por enrich_com_crawler.mapear_cmed_para_schema pra decidir
-    se produto e substancia são "o mesmo nome" (genérico sem marca própria)
-    mesmo quando só um dos dois traz o estado de hidratação - ex: produto
-    "CLORIDRATO DE ONDANSETRONA" e substancia "CLORIDRATO DE ONDANSETRONA
-    DI-HIDRATADO" são o mesmo genérico; sem essa normalização, a comparação
-    ingênua os tratava como nomes diferentes e preenchia "marca" com o nome
-    do sal por engano.
-    """
-    texto = re.sub(r"\s+", " ", bruto or "").strip().upper()
-    for sufixo in _SUFIXOS_HIDRATACAO:
-        if texto.endswith(sufixo):
-            return texto[: -len(sufixo)].strip()
-    return texto
-
-
-def _nome_principio_cmed(bruto):
-    # mantém o nome do sal (ex: "Cloridrato de Amitriptilina") em vez de
-    # simplificar pro princípio ativo puro - genérico sem marca no Brasil é
-    # comercializado e listado na bula com esse nome completo; removê-lo
-    # deixava principios_ativos ("Amitriptilina 25mg") divergente do nome
-    # bruto do produto usado no título ("Cloridrato De Amitriptilina"), o
-    # que confundia o modelo na formatação e gerava título fora de ordem
-    # (ex: "Amitriptilina 25mg Cloridrato 30 Comprimidos").
-    texto = normalizar_nome_substancia_cmed(bruto)
-    partes = []
-    for i, palavra in enumerate(texto.split()):
-        if i > 0 and palavra in _PALAVRAS_PEQUENAS:
-            partes.append(palavra.lower())
-        else:
-            partes.append(palavra.capitalize())
-    return " ".join(partes)
-
-
-def _concentracoes_apresentacao_cmed(apresentacao):
-    """Concentrações só do prefixo da apresentação CMED (ex: '15 MG COM REV...'
-    ou '185 MG + 235 MG + 178 MG PO EFERV...'). Para no primeiro token que
-    não é concentração - nunca pega número de quantidade ('X 30')."""
-    resto = apresentacao or ""
-    achadas = []
-    while True:
-        match = _CONC_CMED_RE.match(resto)
-        if not match:
-            break
-        valor, unidade, denominador = match.group(1), match.group(2).lower(), match.group(3)
-        conc = f"{valor}{unidade}"
-        if denominador:
-            conc += f"/{denominador.lower()}"
-        achadas.append(conc)
-        resto = resto[match.end() :]
-    return achadas
-
-
-def parsear_composicao_cmed(substancia, apresentacao):
-    """
-    Tenta montar principios_ativos sem LLM. Retorna a string se o pareamento
-    for seguro; None se a apresentação for ambígua (aí o chamador cai no
-    modelo). Sem concentração na apresentação devolve só os nomes - nunca
-    inventa mg.
-    """
-    nomes = [_nome_principio_cmed(s) for s in _split_substancias_cmed(substancia)]
-    if not nomes:
-        return None
-    concs = _concentracoes_apresentacao_cmed(apresentacao)
-    if not concs:
-        return ", ".join(nomes)
-    if len(concs) == len(nomes):
-        return ", ".join(f"{nome} {conc}" for nome, conc in zip(nomes, concs))
-    return None
 
 
 CMED_COMPOSICAO_SYSTEM = """Você formata a composição de medicamentos a partir de dados OFICIAIS da \
@@ -1351,77 +1159,15 @@ FORMULA_INFANTIL_RE = re.compile(
 CONCENTRACAO_RE = re.compile(r"\d+[.,]?\d*\s*(?:mg|mcg|g|ml|l|ui)\b", re.IGNORECASE)
 TITULO_MAX_RECOMENDADO = 90
 
-# sais de fármaco reconhecidos - usado só pra comparar título x
-# principios_ativos (ver _corrigir_sal_titulo), não pra decidir se é o
-# princípio ativo em si (por isso inclui SULFATO/FOSFATO aqui, ao contrário
-# de _PREFIXOS_SAL em _nome_principio_cmed)
-_SAIS_CONHECIDOS = (
-    "CLORIDRATO", "BROMIDRATO", "BROMIDRETO", "MALEATO", "BESILATO",
-    "SUCCINATO", "HEMIFUMARATO", "FUMARATO", "MESILATO", "OXALATO",
-    "HEMITARTARATO", "TARTARATO", "CITRATO", "FOSFATO", "SULFATO",
-)
-
-
-def _sal_no_texto(texto):
-    texto_upper = (texto or "").upper()
-    for sal in _SAIS_CONHECIDOS:
-        if re.search(rf"\b{sal}\b", texto_upper):
-            return sal
-    return None
-
 
 def _corrigir_sal_titulo(data, ean):
-    """
-    Corrige em código o título que troca o sal do princípio ativo por outro
-    mais "familiar" pro modelo (ex: escreve "Cloridrato de Midazolam" quando
-    principios_ativos - calculado deterministicamente a partir da fonte
-    oficial, ver parsear_composicao_cmed - diz "Maleato de Midazolam"). Já
-    tentamos resolver só com instrução no prompt (nunca trocar o sal) e o
-    modelo ainda errou 4 de 4 vezes num teste, inclusive escrevendo uma nota
-    dizendo que sabia da regra mas achava que o sal "real" era outro - exatas
-    características do problema que o resto deste arquivo já resolve em
-    código (tarja, categorização) em vez de confiar só no prompt.
+    from pipeline.safety.titulo import corrigir_sal_titulo
+    return corrigir_sal_titulo(data, ean)
 
-    Só corrige de forma automática o caso simples (principios_ativos com 1
-    princípio ativo só, sem "+"/",") - com múltiplos princípios ativos cada
-    um pode ter seu próprio sal (ex: "Cloridrato de Nafazolina + Sulfato de
-    Zinco"), e trocar automaticamente arriscaria acertar o sal errado no
-    princípio ativo errado. Nesse caso só avisa pra revisão manual.
-    """
-    titulo = data.get("titulo") or ""
-    principios = data.get("principios_ativos") or ""
-    sal_titulo = _sal_no_texto(titulo)
-    if not sal_titulo:
-        return
 
-    if "+" in principios or "," in principios:
-        print(
-            f"  [aviso] título de EAN {ean} tem sal ({sal_titulo!r}) e "
-            f"principios_ativos tem múltiplos componentes - confira "
-            f"manualmente se bate: titulo={titulo!r} | "
-            f"principios_ativos={principios!r}"
-        )
-        return
+from pipeline.safety.titulo import sal_no_texto as _sal_no_texto
 
-    sal_principio = _sal_no_texto(principios)
-    if sal_principio and sal_principio != sal_titulo:
-        # usa a grafia original de principios_ativos (ex: "Maleato", não o
-        # "MALEATO" canônico de _SAIS_CONHECIDOS) pra manter a capitalização
-        # consistente com o resto do título
-        match_original = re.search(rf"\b{sal_principio}\b", principios, re.IGNORECASE)
-        substituto = match_original.group(0) if match_original else sal_principio.capitalize()
-        titulo_corrigido = re.sub(
-            rf"\b{sal_titulo}\b", substituto, titulo, flags=re.IGNORECASE
-        )
-        print(
-            f"  [aviso] título de EAN {ean} trocou o sal do princípio ativo "
-            f"(tinha {sal_titulo!r}, principios_ativos confirma "
-            f"{sal_principio!r}) - corrigido: {titulo!r} -> {titulo_corrigido!r}"
-        )
-        data["titulo"] = titulo_corrigido
 
-# indica que o texto que o próprio modelo escreveu contradiz tipo_cadastro =
-# "Medicamento" (ex: descricao_curta dizendo "suplemento alimentar")
 SUPLEMENTO_CONTRADICAO_RE = re.compile(
     r"suplemento alimentar|isento de registro|não é (?:um )?medicamento",
     re.IGNORECASE,
@@ -1590,380 +1336,8 @@ def salvar_imagem_local(ean, image_url, conteudo=None):
         return None
 
 
-def validar_categorizacao(data):
-    """
-    Confere a categorização contra a árvore oficial (tabela `categorias`) e
-    grava `categoria_id` da folha. Aceita id já resolvido (de-para) ou o
-    trio textual da IA. Sem a árvore carregada, não valida. Retorna
-    (ok: bool, motivo: str|None).
-    """
-    departamento = data.get("departamento")
-    categoria = data.get("categoria")
-    subcategoria = data.get("subcategoria")
-    categoria_id = data.get("categoria_id")
-
-    if not categoria_id and not departamento and not categoria and not subcategoria:
-        categorias.aplicar_folha(data, None)
-        return True, None
-
-    if not categorias.carregar_indice()["combinacoes"]:
-        if categoria_id:
-            categorias.aplicar_folha(data, categoria_id)
-        return True, None
-
-    tipo = data.get("tipo_produto")
-    if categoria_id:
-        folha = categorias.por_id(categoria_id)
-        if folha and folha.get("tipo_produto") == tipo:
-            categorias.aplicar_folha(data, folha["id"])
-            return True, None
-        categorias.aplicar_folha(data, None)
-        return False, (
-            f"tipo_cadastro={tipo!r} categoria_id={categoria_id!r} não existe "
-            "na árvore oficial"
-        )
-
-    resolvido = categorias.resolver_id(tipo, departamento, categoria, subcategoria)
-    if resolvido:
-        categorias.aplicar_folha(data, resolvido)
-        return True, None
-    categorias.aplicar_folha(data, None)
-    return False, (
-        f"tipo_cadastro={tipo!r} departamento={departamento!r} "
-        f"categoria={categoria!r} subcategoria={subcategoria!r} não existe "
-        "na árvore oficial"
-    )
-
-
-def resolver_retencao(tarja, principios_ativos):
-    """
-    Decide precisa_retencao_receita a partir da tarja já normalizada
-    (código de dominios.TARJAS) e dos princípios ativos. Mesma regra da
-    CMED, usada por qualquer origem - não inventa retenção sem tarja.
-
-    Preta → True. Sem tarja / não aplicável → False (não consulta a lista).
-    Ausente → None. Vermelha → cruza substancias_controladas (Portaria 344
-    / IN 360). Qualquer outro código → None.
-    """
-    if tarja == TARJA_PRETA:
-        return True
-    if tarja in (TARJA_SEM, TARJA_NAO_APLICAVEL):
-        return False
-    if tarja is None:
-        return None
-    if tarja == TARJA_VERMELHA:
-        return substancias_controladas.substancia_esta_controlada(principios_ativos)
-    return None
-
-
-def compor_frase_obrigatoria(data, tarja, is_medicamento):
-    """
-    Recompõe frase_obrigatoria de forma determinística a partir dos campos já
-    validados, em vez de confiar na composição livre do modelo (que já colou
-    "venda sob prescrição" num produto sem tarja e já truncou o texto
-    canônico de medicamento em geral). Idempotente - pode ser chamada de novo
-    depois que a tarja for atualizada por verify_tarja_registro, sem duplicar
-    nem perder a frase de fórmula infantil.
-
-    precisa_retencao_receita (já em data, calculado antes desta função) troca
-    a frase de prescrição pela variante com retenção quando for "Sim" - Tarja
-    Preta sempre entra aqui (retenção é sempre exigida), e Tarja Vermelha
-    entra quando a substância bate na tabela substancias_controladas (ver
-    resolver_retencao).
-    """
-    partes = []
-    if eh_verdadeiro(data.get("precisa_retencao_receita")):
-        partes.append(FRASE_VENDA_PRESCRICAO_RETENCAO)
-    elif tarja in (TARJA_VERMELHA, TARJA_PRETA):
-        partes.append(FRASE_VENDA_PRESCRICAO)
-    if is_medicamento:
-        partes.append(FRASE_MEDICAMENTO_GERAL)
-    if is_medicamento and eh_verdadeiro(data.get("generico")):
-        partes.append(FRASE_GENERICO)
-    if data.get("departamento") == "Suplementos Alimentares" and not (
-        data.get("categoria") == "Sistema Digestivo"
-        and data.get("subcategoria") in ("Enzimas", "Probióticos")
-    ):
-        partes.append(FRASE_SUPLEMENTO)
-
-    texto_produto = " ".join(
-        str(data.get(campo) or "")
-        for campo in (
-            "titulo",
-            "descricao_curta",
-            "categoria",
-            "subcategoria",
-            "departamento",
-            "frase_obrigatoria",
-        )
-    )
-    if FORMULA_INFANTIL_RE.search(texto_produto):
-        partes.append(FRASE_LEITE)
-
-    return " ".join(partes) if partes else None
-
-
-def apply_safety_checks(data, ean):
-    """
-    Travas de segurança pós-hoc para regras com implicação legal/regulatória -
-    nunca confiar só no prompt, o modelo já errou nelas antes (ex: marcou
-    "Tarja Preta" num antiácido de venda livre, por inferência da classe
-    terapêutica, e truncou/alterou a frase_obrigatoria). Corrige/zera o que dá
-    para validar deterministicamente a partir dos próprios campos
-    estruturados e loga cada ajuste feito, para dar visibilidade do que o
-    modelo errou.
-    """
-    dominios.normalizar_cadastro(data)
-    is_medicamento = eh_medicamento(data)
-
-    # não-medicamento nunca tem tarja nem retenção de receita - carimba os
-    # dois campos aqui em vez de deixar null/ambíguo (a fonte não confirma
-    # isso porque a pergunta não se aplica, não porque falhou em confirmar).
-    if not is_medicamento:
-        data["tarja"] = TARJA_NAO_APLICAVEL
-        data["precisa_retencao_receita"] = False
-
-    # tarja fora do vocabulário fechado = alucinação, zera.
-    tarja = data.get("tarja")
-    if tarja is not None and tarja not in ALLOWED_TARJA:
-        print(f"  [aviso] tarja inválida para EAN {ean} ({tarja!r}) - zerada.")
-        data["tarja"] = tarja = None
-
-    # fonte é uma tabela oficial (CMED, ABCFarma, Tarjados ou IQVIA), não uma
-    # página web - não tem pagina_produto_url por natureza, mas isso não
-    # significa fonte não confirmada, então a checagem de "campos
-    # dependentes de fonte" mais abaixo não se aplica a nenhuma delas. A
-    # exceção de tarja logo a seguir é mais restrita: só a CMED confirma
-    # tarja de fato sempre, e a IQVIA só quando é MIP (Medicamento Isento de
-    # Prescrição - categoria regulatória oficial, não inferência de site -
-    # ver tarja_confirmada_iqvia_mip) - um valor de tarja vindo de origem
-    # abcfarma/tarjados, ou de origem iqvia sem ser essa exceção (ex: RX, que
-    # só diz "precisa receita" sem distinguir Vermelha de Preta), não é uma
-    # fonte confirmada e deve continuar sendo zerado por essa regra.
-    origem = origem_codigo(data)
-    origem_e_cmed = origem == ORIGEM_ANVISA_CMED
-    tarja_iqvia_mip_confirmada = eh_verdadeiro(data.get("tarja_confirmada_iqvia_mip"))
-    origem_confiavel_sem_url = origem in (
-        ORIGEM_ANVISA_CMED,
-        ORIGEM_ABCFARMA,
-        ORIGEM_TARJADOS,
-        ORIGEM_IQVIA,
-    )
-
-    # tarja sem fonte confirmada: já vimos o modelo alucinar tarja mais de uma
-    # vez exatamente quando não tem pagina_produto_url (ex: "Sem Tarja" num
-    # remédio que é Tarja Vermelha) - tarja tem risco legal maior que os
-    # outros campos, então aqui zera automaticamente em vez de só avisar.
-    if (
-        is_medicamento
-        and not data.get("pagina_produto_url")
-        and tarja is not None
-        and not origem_e_cmed
-        and not tarja_iqvia_mip_confirmada
-    ):
-        print(
-            f"  [aviso] tarja zerada automaticamente para EAN {ean} - "
-            f"medicamento sem pagina_produto_url (fonte não confirmada), "
-            f"valor descartado: {tarja!r}"
-        )
-        data["tarja"] = tarja = None
-
-    # retenção de receita - carimbada em código (não pelo modelo), mesma
-    # lógica determinística de frase_obrigatoria/imagem. Vale pra qualquer
-    # origem, inclusive CMED: Preta / Sem Tarja / ausente / Vermelha cruzada
-    # com substancias_controladas (ver resolver_retencao). Não-medicamento
-    # já foi carimbado acima e não entra aqui.
-    if is_medicamento:
-        data["precisa_retencao_receita"] = resolver_retencao(
-            tarja, data.get("principios_ativos")
-        )
-
-    # medicamento nunca leva imagem no e-commerce (regra de negócio) -
-    # qualquer tarja, inclusive Sem Tarja / não confirmada. Não-medicamento
-    # segue com a URL, depois filtrada por tamanho mínimo.
-    imagem_bloqueada = is_medicamento
-    if imagem_bloqueada and data.get("imagem_url"):
-        print(
-            f"  [info] imagem removida para EAN {ean} (medicamento): "
-            f"{data['imagem_url']}"
-        )
-        data["imagem_url"] = None
-
-    # imagem pequena demais (ícone/logo/thumbnail) não serve como foto de
-    # produto - descarta sem gastar token, é só download + leitura local
-    if not imagem_bloqueada and data.get("imagem_url"):
-        ok, motivo, conteudo = check_imagem_tamanho_minimo(data["imagem_url"])
-        if not ok:
-            print(
-                f"  [aviso] imagem descartada para EAN {ean} ({motivo}): "
-                f"{data['imagem_url']}"
-            )
-            data["imagem_url"] = None
-            data.pop("_imagem_bytes", None)
-        elif conteudo:
-            data["_imagem_bytes"] = conteudo
-
-    # registro_ms e generico só fazem sentido para medicamento
-    if not is_medicamento:
-        if data.get("registro_ms"):
-            print(
-                f"  [info] registro_ms removido para EAN {ean} (produto não "
-                f"é medicamento): {data['registro_ms']}"
-            )
-            data["registro_ms"] = None
-        if data.get("generico"):
-            data["generico"] = None
-
-    # data_pesquisa: carimbada em código (não pelo modelo, que não tem como
-    # saber a data real da chamada) - só faz sentido quando um preço foi de
-    # fato encontrado, senão fica sem sentido registrar "quando" de um dado
-    # que não existe.
-    data["data_pesquisa"] = date.today().isoformat() if data.get("preco_pesquisado") else None
-
-    # departamento/categoria/subcategoria: confere contra a árvore oficial em
-    # vez de confiar que o modelo seguiu a instrução do prompt - o modelo já
-    # inventou uma combinação inexistente antes (categoria certa existia na
-    # árvore, mas ele escolheu outra errada, e ainda deixou subcategoria
-    # vazia com categoria preenchida, o que o próprio prompt proíbe).
-    categorizacao_ok, motivo_categorizacao = validar_categorizacao(data)
-    if not categorizacao_ok:
-        print(f"  [aviso] categorização inválida para EAN {ean} ({motivo_categorizacao}) - zerada.")
-        categorias.aplicar_folha(data, None)
-        # sinaliza pra marcar_validacao_humana - sem isso o produto ficava
-        # sem categoria e sem nenhuma sinalização de revisão (só o print
-        # acima, perdido depois que o job termina).
-        data["_categorizacao_invalida"] = motivo_categorizacao
-
-    # frase_obrigatoria: recompõe de forma determinística a partir dos campos
-    # já validados acima em vez de confiar na composição livre do modelo, que
-    # já colou "venda sob prescrição" num produto sem tarja e já truncou o
-    # texto canônico de medicamento em geral.
-    frase_final = compor_frase_obrigatoria(data, tarja, is_medicamento)
-    if frase_final != data.get("frase_obrigatoria"):
-        print(
-            f"  [info] frase_obrigatoria recomposta para EAN {ean}: "
-            f"{data.get('frase_obrigatoria')!r} -> {frase_final!r}"
-        )
-    data["frase_obrigatoria"] = frase_final
-
-    # título com sal trocado (ex: "Cloridrato de Midazolam" quando a fonte
-    # confirmou "Maleato de Midazolam") - corrige em código, ver
-    # _corrigir_sal_titulo. Roda antes das checagens abaixo pra elas já
-    # olharem o título corrigido.
-    if is_medicamento:
-        _corrigir_sal_titulo(data, ean)
-
-    # título: não dá para reescrever com segurança em código (precisaria
-    # saber a forma farmacêutica certa), só avisa para revisão manual quando
-    # parece ter colado a composição completa (marca + 3 concentrações) ou
-    # ficou longo demais para busca/listagem de e-commerce.
-    titulo = data.get("titulo") or ""
-    n_concentracoes = len(CONCENTRACAO_RE.findall(titulo))
-    if data.get("marca") and n_concentracoes >= 3:
-        print(
-            f"  [aviso] título de EAN {ean} pode estar listando composição "
-            f"completa indevidamente (marca + {n_concentracoes} concentrações) "
-            f"- revisar manualmente: {titulo!r}"
-        )
-    elif len(titulo) > TITULO_MAX_RECOMENDADO:
-        print(
-            f"  [aviso] título de EAN {ean} tem {len(titulo)} caracteres "
-            f"(> {TITULO_MAX_RECOMENDADO}) - revisar se está buscável: "
-            f"{titulo!r}"
-        )
-
-    # título de não-medicamento começando pela marca: o prompt manda
-    # "[O que o produto é] [Marca] [Linha] [Atributo] [Volume/Qtd]"
-    # (tipo do objeto primeiro), mas já vimos o modelo devolver marca
-    # primeiro mesmo assim - não dá pra reordenar com segurança em código
-    # sem saber qual palavra é a categoria do produto, só avisa.
-    marca_atual = data.get("marca")
-    if not is_medicamento and marca_atual and titulo:
-        if titulo.strip().lower().startswith(marca_atual.strip().lower()):
-            print(
-                f"  [aviso] título de EAN {ean} começa pela marca ({marca_atual!r}), "
-                f"mas o padrão de não-medicamento manda categoria do produto "
-                f"primeiro - revisar manualmente: {titulo!r}"
-            )
-
-    # fabricante igual à marca: sinal de que o fabricante não foi
-    # confirmado de verdade (já vimos o modelo devolver o próprio nome da
-    # marca como fabricante quando a busca não achou o fabricante real,
-    # ex: marca "Nestonutri" e fabricante "Nestonutri" ao invés de "Nestlé")
-    # - não dá pra saber o fabricante certo em código, só avisa.
-    fabricante_atual = data.get("fabricante")
-    if (
-        marca_atual
-        and fabricante_atual
-        and marca_atual.strip().lower() == fabricante_atual.strip().lower()
-    ):
-        print(
-            f"  [aviso] EAN {ean} tem fabricante igual à marca ({fabricante_atual!r}) "
-            f"- provável fabricante não confirmado de verdade, revisar manualmente."
-        )
-
-    # título sem o princípio ativo: com marca + 1-2 princípios ativos, o
-    # prompt exige nome + concentração de cada um no título (mesmo exemplo
-    # usado no próprio prompt) - se nenhum princípio aparece, o modelo não
-    # seguiu essa regra.
-    principios = data.get("principios_ativos")
-    if is_medicamento and data.get("marca") and principios:
-        itens = [p.strip() for p in principios.split(",") if p.strip()]
-        if 1 <= len(itens) <= 2:
-            nomes = []
-            for item in itens:
-                match_nome = re.match(r"([^\d]+)", item)
-                if match_nome:
-                    nomes.append(match_nome.group(1).strip())
-            titulo_lower = titulo.lower()
-            # compara palavra a palavra (não a frase toda) - "Colágeno Tipo
-            # II" no título já conta como citar "Colágeno Tipo II Não
-            # Hidrolisado", não precisa bater o qualificador inteiro
-            palavras_relevantes = [
-                palavra
-                for nome in nomes
-                for palavra in nome.split()
-                if len(palavra) > 3
-            ]
-            if palavras_relevantes and not any(
-                palavra.lower() in titulo_lower for palavra in palavras_relevantes
-            ):
-                print(
-                    f"  [aviso] título de EAN {ean} tem marca + 1-2 "
-                    f"princípios ativos mas não cita nenhum deles - revisar: "
-                    f"{titulo!r} (princípios: {principios!r})"
-                )
-
-    # contradição interna: tipo_cadastro="Medicamento" mas o próprio texto
-    # gerado (descricao_curta/titulo) indica que é suplemento/isento de
-    # registro - sinal de que o modelo classificou tipo_cadastro errado (viu
-    # isso acontecer: Medicamento com descricao_curta dizendo "suplemento
-    # alimentar sem prescrição médica").
-    texto_gerado = f"{titulo} {data.get('descricao_curta') or ''}"
-    if is_medicamento and SUPLEMENTO_CONTRADICAO_RE.search(texto_gerado):
-        print(
-            f"  [aviso] EAN {ean} classificado como Medicamento, mas o texto "
-            f"gerado sugere suplemento/isento de registro - revisar "
-            f"tipo_cadastro: {texto_gerado[:200]!r}"
-        )
-
-    # sem fonte rastreável: pagina_produto_url vazio mas campos que só fazem
-    # sentido com base numa fonte confirmada vieram preenchidos - contraria a
-    # REGRA CRÍTICA do prompt ("campo não confirmado na fonte = null"). Só
-    # avisa (não zera automaticamente) porque às vezes a fonte real existe
-    # mas o modelo esqueceu de citar a URL.
-    if (
-        not data.get("pagina_produto_url")
-        and any(data.get(c) for c in CAMPOS_DEPENDENTES_DE_FONTE)
-        and not origem_confiavel_sem_url
-    ):
-        print(
-            f"  [aviso] EAN {ean} sem pagina_produto_url mas com campos "
-            f"dependentes de fonte preenchidos - revisar se os dados foram "
-            f"confirmados de verdade ou inferidos sem base."
-        )
-
-    return data
+from pipeline.safety.checks import apply_safety_checks, validar_categorizacao
+from pipeline.safety.frases import resolver_retencao, compor_frase_obrigatoria
 
 
 def call_model(
@@ -2191,13 +1565,9 @@ def call_model(
     return None, usage
 
 
-DB_CONFIG = {
-    "host": os.environ.get("PG_HOST", "localhost"),
-    "port": os.environ.get("PG_PORT", "5433"),
-    "user": os.environ.get("PG_USER", "cadastro"),
-    "password": os.environ.get("PG_PASSWORD", "cadastro"),
-    "dbname": os.environ.get("PG_DB", "cadastro_produtos"),
-}
+from pipeline.db import dsn as _dsn
+
+DB_CONFIG = _dsn()
 
 FASES_TERMINAIS = ("concluido", "nao_localizado")
 
@@ -2214,7 +1584,7 @@ COLUNAS_ORIGEM = [
 
 
 def conectar():
-    return psycopg2.connect(**DB_CONFIG)
+    return psycopg2.connect(**_dsn())
 
 
 def buscar_pendentes(conn, eans=None, limit=None):

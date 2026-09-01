@@ -18,13 +18,8 @@ import psycopg2
 
 from dominios import ORIGEM_ANVISA_CMED, TARJA_PRETA, TARJA_SEM, TARJA_VERMELHA
 
-DB_CONFIG = {
-    "host": os.environ.get("PG_HOST", "localhost"),
-    "port": os.environ.get("PG_PORT", "5433"),
-    "user": os.environ.get("PG_USER", "cadastro"),
-    "password": os.environ.get("PG_PASSWORD", "cadastro"),
-    "dbname": os.environ.get("PG_DB", "cadastro_produtos"),
-}
+from pipeline.db import dsn as _dsn
+
 
 CAMPOS = (
     "ggrem", "substancia", "laboratorio", "registro_ms",
@@ -48,7 +43,7 @@ TARJA_CMED_PARA_SCHEMA = {
 
 
 def conectar():
-    return psycopg2.connect(**DB_CONFIG)
+    return psycopg2.connect(**_dsn())
 
 
 def normalizar_ean(valor):
