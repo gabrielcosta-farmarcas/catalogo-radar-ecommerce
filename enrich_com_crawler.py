@@ -1175,7 +1175,7 @@ def main():
                     print(f"[{processed}/{total}] EAN {ean_falho} -> ERRO não tratado, pulando: {exc!r}")
                     continue
 
-                ep.salvar_resultado(conn, ean, data, usage)
+                ep.salvar_resultado(conn, ean, data, usage, nome_produto=nome_produto)
 
                 origem = ORIGEM_CLAUDE
                 status = ep.STATUS_NOT_FOUND

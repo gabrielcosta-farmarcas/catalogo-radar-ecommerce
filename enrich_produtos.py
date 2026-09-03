@@ -244,6 +244,36 @@ RESULT_COLUMNS = [
     "data_pesquisa",
 ]
 
+QUANTIDADE_UNIDADES_RE = re.compile(r"(\d+)\s*unidades?", re.IGNORECASE)
+
+MENSAGEM_VALIDACAO_QUANTIDADE_DIVERGENTE = (
+    "VALIDAÇÃO HUMANA OBRIGATÓRIA: a quantidade de unidades no nome original "
+    "do produto ({qtd_nome}) diverge da quantidade no título gerado "
+    "({qtd_titulo}) - pode ser erro de contagem do enriquecimento ou "
+    "diferença legítima entre embalagem e total de peças. Confirmar a "
+    "quantidade correta antes de publicar no e-commerce."
+)
+
+
+def checar_quantidade_divergente(nome_produto, titulo):
+    """
+    Compara a quantidade de unidades mencionada em nome_produto (input do
+    ecom) com a do titulo (gerado pelo enriquecimento) - ex: nome diz "4
+    unidades" e o titulo gerado diz "5 Unidades". Não indica sozinho qual
+    dos dois está certo (pode ser divergência legítima entre embalagem e
+    total de peças, não só erro de contagem) - só sinaliza pra revisão
+    humana, ver investigação do caso Colgate EAN 7509546657240.
+
+    Retorna (divergente: bool, qtd_nome: int|None, qtd_titulo: int|None).
+    """
+    match_nome = QUANTIDADE_UNIDADES_RE.search(nome_produto or "")
+    match_titulo = QUANTIDADE_UNIDADES_RE.search(titulo or "")
+    if not match_nome or not match_titulo:
+        return False, None, None
+    qtd_nome, qtd_titulo = int(match_nome.group(1)), int(match_titulo.group(1))
+    return qtd_nome != qtd_titulo, qtd_nome, qtd_titulo
+
+
 STATUS_OK = "OK"
 STATUS_NOT_FOUND = "Não localizado"
 
@@ -1613,11 +1643,16 @@ def buscar_pendentes(conn, eans=None, limit=None):
         return cur.fetchall()
 
 
-def salvar_resultado(conn, ean, data, usage=None):
+def salvar_resultado(conn, ean, data, usage=None, nome_produto=None):
     """
     Grava o resultado de um EAN na tabela produtos e comita na hora - uma
     transação por linha, então se o processo cair no meio, no máximo essa
     linha se perde, nunca as já concluídas antes dela.
+
+    nome_produto: nome original do ecom (input), usado só pra calcular
+    quantidade_divergente (ver calcular_quantidade_divergente) - não é
+    gravado em nenhuma coluna, produtos.nome_produto já existe desde o
+    carregamento inicial (db.py carregar_eans) e não muda aqui.
     """
     usage = usage or {"tokens": 0, "cache_creation": 0, "cache_read": 0}
 
@@ -1642,6 +1677,16 @@ def salvar_resultado(conn, ean, data, usage=None):
         return
 
     data = marcar_validacao_humana(dominios.normalizar_cadastro(data))
+    divergente, qtd_nome, qtd_titulo = checar_quantidade_divergente(nome_produto, data.get("titulo"))
+    if divergente:
+        mensagem_quantidade = MENSAGEM_VALIDACAO_QUANTIDADE_DIVERGENTE.format(
+            qtd_nome=qtd_nome, qtd_titulo=qtd_titulo
+        )
+        mensagem_atual = data.get(MENSAGEM_VALIDACAO_COLUMN)
+        data[VALIDACAO_HUMANA_COLUMN] = True
+        data[MENSAGEM_VALIDACAO_COLUMN] = (
+            f"{mensagem_atual} | {mensagem_quantidade}" if mensagem_atual else mensagem_quantidade
+        )
     colunas = RESULT_COLUMNS + VALIDACAO_COLUMNS + COLUNAS_ORIGEM
     set_clause = ", ".join(f"{col} = %s" for col in colunas)
     valores = [data.get(col) for col in colunas]
@@ -1853,7 +1898,7 @@ def main():
             # salvar_resultado só acontece aqui na thread principal - seguro
             for future in as_completed(futures):
                 ean, nome_produto, data, usage = future.result()
-                salvar_resultado(conn, ean, data, usage)
+                salvar_resultado(conn, ean, data, usage, nome_produto=nome_produto)
                 processed += 1
                 total_tokens_geral += usage["tokens"]
                 total_cache_read += usage["cache_read"]
