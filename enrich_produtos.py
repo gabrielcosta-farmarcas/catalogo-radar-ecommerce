@@ -244,25 +244,33 @@ RESULT_COLUMNS = [
     "data_pesquisa",
 ]
 
-QUANTIDADE_UNIDADES_RE = re.compile(r"(\d+)\s*unidades?", re.IGNORECASE)
+QUANTIDADE_UNIDADES_RE = re.compile(
+    r"(\d+)\s*(?:unidades?|tiras?|pe[çc]as?|folhas?|sach[êe]s?|c[áa]psulas?|"
+    r"comprimidos?|pares?|envelopes?|absorventes?|fraldas?)\b",
+    re.IGNORECASE,
+)
 
 MENSAGEM_VALIDACAO_QUANTIDADE_DIVERGENTE = (
-    "VALIDAÇÃO HUMANA OBRIGATÓRIA: a quantidade de unidades no nome original "
-    "do produto ({qtd_nome}) diverge da quantidade no título gerado "
-    "({qtd_titulo}) - pode ser erro de contagem do enriquecimento ou "
-    "diferença legítima entre embalagem e total de peças. Confirmar a "
-    "quantidade correta antes de publicar no e-commerce."
+    "VALIDAÇÃO HUMANA OBRIGATÓRIA: a quantidade no nome original do produto "
+    "({qtd_nome}) diverge da quantidade no título gerado ({qtd_titulo}) - "
+    "pode ser erro de contagem do enriquecimento, diferença legítima entre "
+    "embalagem e total de peças, ou o crawler ter casado com a página de "
+    "outro produto (ex: um combo/kit que não é este EAN). Confirmar a "
+    "quantidade e se o produto encontrado é de fato este EAN antes de "
+    "publicar no e-commerce."
 )
 
 
 def checar_quantidade_divergente(nome_produto, titulo):
     """
-    Compara a quantidade de unidades mencionada em nome_produto (input do
-    ecom) com a do titulo (gerado pelo enriquecimento) - ex: nome diz "4
-    unidades" e o titulo gerado diz "5 Unidades". Não indica sozinho qual
-    dos dois está certo (pode ser divergência legítima entre embalagem e
-    total de peças, não só erro de contagem) - só sinaliza pra revisão
-    humana, ver investigação do caso Colgate EAN 7509546657240.
+    Compara a quantidade mencionada em nome_produto (input do ecom) com a
+    do titulo (gerado pelo enriquecimento) - unidades, tiras, cápsulas,
+    fraldas etc. Ex: nome diz "32 unidades" e o titulo gerado diz "64
+    Tiras". Não indica sozinho qual dos dois está certo - pode ser erro de
+    contagem, diferença legítima entre embalagem e total de peças, ou (caso
+    mais grave) o crawler ter casado com a página de um combo/kit diferente
+    do EAN real (ver investigação dos casos Colgate EAN 7509546657240 e
+    Plenitud EAN 17896007551719) - só sinaliza pra revisão humana decidir.
 
     Retorna (divergente: bool, qtd_nome: int|None, qtd_titulo: int|None).
     """
