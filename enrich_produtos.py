@@ -246,7 +246,7 @@ RESULT_COLUMNS = [
 
 QUANTIDADE_UNIDADES_RE = re.compile(
     r"(\d+)\s*(?:unidades?|tiras?|pe[çc]as?|folhas?|sach[êe]s?|c[áa]psulas?|"
-    r"comprimidos?|pares?|envelopes?|absorventes?|fraldas?)\b",
+    r"pares?|envelopes?|absorventes?|fraldas?)\b",
     re.IGNORECASE,
 )
 
