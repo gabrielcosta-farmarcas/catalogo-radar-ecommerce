@@ -1,11 +1,9 @@
-"""Cadeia de fontes oficiais + crawler + Claude."""
+"""Cadeia de fontes oficiais + crawler. Claude só formata o que essas fontes
+já localizaram - não faz busca própria na internet (ver run())."""
 
 from __future__ import annotations
 
-import time
 from typing import Callable, Protocol
-
-from dominios import ORIGEM_CLAUDE
 
 
 class CatalogSource(Protocol):
@@ -78,10 +76,14 @@ def fontes_oficiais() -> list[_Fonte]:
 def run(ean, nome_produto, args, client):
     """
     Mesmo fluxo de enrich_com_crawler.worker: primeira fonte que achar o EAN
-    formata e devolve. Crawler se confiável; senão Claude.
+    formata e devolve (CMED, ABCFarma, Tarjados, IQVIA, crawler se
+    confiável). Claude não faz busca própria na internet aqui - só é usado,
+    dentro de cada fonte.mapear(), pra formatar/categorizar o que a fonte já
+    confirmou (ver formatar_campos_confirmados em enrich_produtos.py).
+    Sem nenhuma fonte confirmando o EAN, o produto vai direto pra fila de
+    "não localizado" - sem gastar token nenhum.
     """
     import enrich_com_crawler as fluxo
-    import enrich_produtos as ep
     from pipeline.classify import eh_confiavel
 
     usage_total = {"tokens": 0, "cache_creation": 0, "cache_read": 0}
@@ -115,22 +117,8 @@ def run(ean, nome_produto, args, client):
         data, usage = fluxo.mapear_para_schema(resultado, fontes, client, args.model)
         return ean, nome_produto, data, usage
 
-    avisar("claude", "Buscando com Claude (pode demorar)")
-    time.sleep(args.sleep)
-    data, usage_claude = ep.call_model(
-        client,
-        args.model,
-        ean,
-        nome_produto,
-        verify_images=args.verify_images,
-        verify_tarja=not args.sem_verificar_tarja,
-        pistas_nao_confirmadas=fluxo.montar_pistas_nao_confirmadas(resultado, fontes),
-    )
-    for chave in usage_total:
-        usage_total[chave] += usage_claude[chave]
-    if data is not None:
-        data["origem_enriquecimento"] = ORIGEM_CLAUDE
-        data["origem_referencia"] = None
-        data["confirmado_anvisa_cmed"] = False
-        data = ep.marcar_validacao_humana(data)
-    return ean, nome_produto, data, usage_total
+    # Nenhuma fonte oficial nem o crawler confirmou o EAN - não cai mais pra
+    # busca agentic do Claude na internet (ver docstring). Fica "não
+    # localizado" sem custo de token nenhum.
+    avisar("nao_localizado", "Nenhuma fonte confirmou o EAN")
+    return ean, nome_produto, None, usage_total
