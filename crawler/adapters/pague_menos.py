@@ -39,8 +39,10 @@ class PagueMenosAdapter(SiteAdapter):
             if not items:
                 return None
 
-            item = items[0]
-            if not ean_igual(item.get("ean"), ean):
+            # produto com várias variantes (ex: tamanhos diferentes) tem um
+            # item por variante - o EAN pedido pode não ser o items[0].
+            item = next((it for it in items if ean_igual(it.get("ean"), ean)), None)
+            if item is None:
                 return None
 
             images = item.get("images", [])

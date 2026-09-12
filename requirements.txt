@@ -9,5 +9,6 @@ anthropic
 httpx
 Pillow
 requests
+pyopenssl
 pypdf
 pytest

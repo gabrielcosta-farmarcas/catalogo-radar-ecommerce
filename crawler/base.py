@@ -11,6 +11,21 @@ from html import unescape
 
 import requests
 
+try:
+    # alguns sites (ex: Época Cosméticos) exigem um handshake TLS que o
+    # ssl nativo deste Python não faz (aqui, LibreSSL 2.8.3 do venv - bem
+    # mais antigo que o exigido, dá SSLError: TLSV1_ALERT_PROTOCOL_VERSION
+    # mesmo com o site no ar e respondendo normal pra outros clientes,
+    # como visto testando o mesmo endpoint com curl). Troca a implementação
+    # TLS do urllib3 pela do pyOpenSSL (mais completa) quando disponível;
+    # sem o pacote instalado, segue com o ssl nativo - não quebra nada dos
+    # outros adapters, que já funcionam sem isso.
+    import urllib3.contrib.pyopenssl
+
+    urllib3.contrib.pyopenssl.inject_into_urllib3()
+except ImportError:
+    pass
+
 from .models import ProductResult
 from dominios import parse_tarja
 

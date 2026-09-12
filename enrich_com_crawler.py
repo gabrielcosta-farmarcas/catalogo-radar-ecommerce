@@ -58,7 +58,6 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from crawler.adapters.americanas import AmericanasAdapter
 from crawler.adapters.araujo import AraujoAdapter
 from crawler.adapters.drogal import DrogalAdapter
 from crawler.adapters.drogaria_pacheco import DrogariaPachecoAdapter
@@ -164,13 +163,11 @@ ADAPTERS_EM_ORDEM = [
     VenancioAdapter(),
     DrogalAdapter(),
     AraujoAdapter(),
-    # Americanas (marketplace generalista) e Época Cosméticos (especializada
-    # em beleza) não são farmácia - cobrem categoria que nenhum adapter
-    # acima vê (suplemento, casa, brinquedo, papelaria, dermocosmético
-    # genérico). Ficam no fim da ordem porque não têm ficha regulatória de
-    # medicamento como as farmácias - servem sobretudo nome/imagem/categoria
-    # de não-medicamento, não tarja/registro_ms.
-    AmericanasAdapter(),
+    # Época Cosméticos (especializada em beleza) não é farmácia - cobre
+    # dermocosmético genérico que nenhum adapter acima vê. Fica no fim da
+    # ordem porque não tem ficha regulatória de medicamento como as
+    # farmácias - serve sobretudo nome/imagem/categoria de não-medicamento,
+    # não tarja/registro_ms.
     EpocaCosmeticosAdapter(),
 ]
 
