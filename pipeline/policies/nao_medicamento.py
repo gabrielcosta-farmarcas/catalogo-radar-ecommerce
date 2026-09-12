@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dominios import TARJA_NAO_APLICAVEL
-from pipeline.prompts.nao_medicamento import FORMAT_CAMPOS_SYSTEM
+from pipeline.prompts.nao_medicamento import FORMAT_CAMPOS_SEM_CATEGORIA, FORMAT_CAMPOS_SYSTEM
 
 
 class NaoMedicamentoPolicy:
@@ -9,6 +9,9 @@ class NaoMedicamentoPolicy:
 
     def format_system_template(self) -> str:
         return FORMAT_CAMPOS_SYSTEM
+
+    def format_system_template_sem_categorizacao(self) -> str:
+        return FORMAT_CAMPOS_SEM_CATEGORIA
 
     def apply_invariants(self, data: dict, ean: str) -> None:
         data["tarja"] = TARJA_NAO_APLICAVEL

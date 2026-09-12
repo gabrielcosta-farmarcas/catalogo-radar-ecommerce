@@ -17,6 +17,9 @@ class ProductPolicy(Protocol):
     def format_system_template(self) -> str:
         ...
 
+    def format_system_template_sem_categorizacao(self) -> str:
+        ...
+
 
 def policy_for(data_ou_tipo) -> ProductPolicy:
     from pipeline.policies.medicamento import MedicamentoPolicy

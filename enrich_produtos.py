@@ -49,6 +49,7 @@ from dominios import (
     TARJA_PRETA,
     TARJA_SEM,
     TARJA_VERMELHA,
+    TIPO_MEDICAMENTO,
     TIPO_NAO_MEDICAMENTO,
     eh_medicamento,
     eh_verdadeiro,
@@ -136,8 +137,8 @@ SYSTEM_PROMPT = """Você é um especialista em cadastro de produtos farmacêutic
 (medicamentos, dermocosméticos, higiene, beleza, suplementos, puericultura, dispositivos médicos).
 
 PROCESSO: web_search (máx. 3) em qualquer fonte confiável (fabricante, ANVISA/Bulário, farmácias \
-online); em divergência, priorize fabricante > ANVISA > farmácias. web_fetch (máx. 3) na(s) \
-página(s) mais confiável(is). Busque a URL de imagem do produto no HTML (src/data-src/og:image, \
+online); em divergência, priorize fabricante > ANVISA > farmácias. web_fetch (máx. 1) na página \
+mais confiável dentre os resultados. Busque a URL de imagem do produto no HTML (src/data-src/og:image, \
 .jpg/.png/.webp) SOMENTE se for Não Medicamento. Se for medicamento (qualquer tarja, inclusive \
 Sem Tarja), NUNCA retorne imagem_url (null), mesmo existindo.
 
@@ -624,6 +625,24 @@ FORMAT_SYSTEM_BLOCKS[None] = system_cached(
     _montar_format_system(ARVORE_CATEGORIZACAO or "", None)
 )
 
+
+def _montar_format_system_sem_categorizacao(tipo):
+    from pipeline.policies.base import policy_for
+    return policy_for(tipo).format_system_template_sem_categorizacao()
+
+
+# título/descrição sem árvore — só quando o de-para humano já fechou a
+# folha (CMED/IQVIA/Tarjados). mesmas regras de copy; categoria não entra
+# no prompt e o chamador ignora departamento/categoria/subcategoria do modelo.
+FORMAT_COPY_BLOCKS = {
+    TIPO_MEDICAMENTO: system_cached(
+        _montar_format_system_sem_categorizacao(TIPO_MEDICAMENTO)
+    ),
+    TIPO_NAO_MEDICAMENTO: system_cached(
+        _montar_format_system_sem_categorizacao(TIPO_NAO_MEDICAMENTO)
+    ),
+}
+
 # só categorização - sem regras de título/descrição. usada depois da busca
 # agentic, quando titulo/descricao_curta já vieram da fonte e mandar o
 # prompt completo de formatação só inflava token (o modelo ainda gerava
@@ -733,6 +752,7 @@ def formatar_campos_confirmados(
     categoria_bruta=None,
     descricao_bruta=None,
     fabricante=None,
+    categoria_ja_mapeada=False,
 ):
     """
     Uma única chamada de texto (sem busca) para título, categorização e
@@ -741,6 +761,12 @@ def formatar_campos_confirmados(
     (em apply_safety_checks) continua zerando combinação fora da árvore. Se
     não houver texto bruto, força descricao_curta=null mesmo que o modelo
     tente preencher.
+
+    categoria_ja_mapeada: de-para humano já fechou a folha (ou confirmou
+    que nenhuma se aplica). Não manda a árvore nem pede
+    departamento/categoria/subcategoria — o chamador usa o mapeamento.
+    Título e descrição seguem o mesmo pack do tipo. Travas de tarja/MS/
+    fila humana não passam por aqui.
 
     fabricante: só usado pelo próprio modelo pra montar o título de
     medicamento genérico sem marca própria ("[Fabricante] Genérico" - ver
@@ -759,7 +785,12 @@ def formatar_campos_confirmados(
     subcategoria, usage).
     """
     usage = usage_vazio()
-    system = FORMAT_SYSTEM_BLOCKS.get(tipo_cadastro) or FORMAT_SYSTEM_BLOCKS.get(None)
+    if categoria_ja_mapeada:
+        system = FORMAT_COPY_BLOCKS.get(tipo_cadastro)
+    else:
+        system = None
+    if not system:
+        system = FORMAT_SYSTEM_BLOCKS.get(tipo_cadastro) or FORMAT_SYSTEM_BLOCKS.get(None)
     if not system:
         return {}, usage
 
@@ -772,9 +803,12 @@ def formatar_campos_confirmados(
         f"quantidade/apresentação: {quantidade}\n"
         f"nome bruto (referência - pode ter finalidade terapêutica ou ordem "
         f"errada, reformate, não copie): {nome_bruto}\n"
-        f"categoria bruta do site (referência, pode não bater com nossa "
-        f"árvore - não copie): {categoria_bruta}\n"
     )
+    if not categoria_ja_mapeada:
+        mensagem += (
+            f"categoria bruta do site (referência, pode não bater com nossa "
+            f"árvore - não copie): {categoria_bruta}\n"
+        )
     if tipo_cadastro == TIPO_NAO_MEDICAMENTO:
         mensagem += (
             "\nTítulo de não-medicamento: [O que o produto é] [Marca] [Linha] "
@@ -796,9 +830,12 @@ def formatar_campos_confirmados(
             "\ntexto bruto do site: (ausente - descricao_curta DEVE ser null, "
             "não invente)\n"
         )
-    mensagem += (
-        "\nGere titulo, descricao_curta e departamento/categoria/subcategoria."
-    )
+    if categoria_ja_mapeada:
+        mensagem += "\nGere titulo e descricao_curta."
+    else:
+        mensagem += (
+            "\nGere titulo, descricao_curta e departamento/categoria/subcategoria."
+        )
 
     data, usage = _chamar_formatacao_campos(client, model, system, mensagem)
     if data is None:
@@ -818,9 +855,9 @@ def formatar_campos_confirmados(
     return {
         "titulo": data.get("titulo"),
         "descricao_curta": data.get("descricao_curta"),
-        "departamento": data.get("departamento"),
-        "categoria": data.get("categoria"),
-        "subcategoria": data.get("subcategoria"),
+        "departamento": None if categoria_ja_mapeada else data.get("departamento"),
+        "categoria": None if categoria_ja_mapeada else data.get("categoria"),
+        "subcategoria": None if categoria_ja_mapeada else data.get("subcategoria"),
     }, usage
 
 
@@ -1123,20 +1160,27 @@ LOCALIZACAO_BUSCA_BR = {
 }
 
 
-def _ferramentas_busca(max_uses=3, max_content_tokens=WEB_FETCH_MAX_CONTENT_TOKENS):
-    """web_search/web_fetch da busca geral: bloqueia lixo, localiza no BR."""
+def _ferramentas_busca(
+    max_search_uses=3, max_fetch_uses=1, max_content_tokens=WEB_FETCH_MAX_CONTENT_TOKENS
+):
+    """web_search/web_fetch da busca geral: bloqueia lixo, localiza no BR.
+
+    web_fetch (página lida por inteiro) é o que mais pesa em token - por
+    isso seu limite é mais apertado que o de web_search (resultado é só um
+    snippet curto por busca).
+    """
     return [
         {
             "type": "web_search_20250305",
             "name": "web_search",
-            "max_uses": max_uses,
+            "max_uses": max_search_uses,
             "blocked_domains": DOMINIOS_BUSCA_BLOQUEADOS,
             "user_location": LOCALIZACAO_BUSCA_BR,
         },
         {
             "type": "web_fetch_20250910",
             "name": "web_fetch",
-            "max_uses": max_uses,
+            "max_uses": max_fetch_uses,
             "max_content_tokens": max_content_tokens,
             "blocked_domains": DOMINIOS_BUSCA_BLOQUEADOS,
         },
@@ -1416,14 +1460,27 @@ def call_model(
     nome_produto = nome_para_busca(nome_produto)
     user_message = build_user_message(ean, nome_produto, pistas_nao_confirmadas)
     messages = [{"role": "user", "content": user_message}]
-    tools = _ferramentas_busca(max_uses=3)
+    tools = _ferramentas_busca()
     usage = {"tokens": 0, "cache_creation": 0, "cache_read": 0}
+
+    debug = os.environ.get("DEBUG_CALL_MODEL")
 
     def track(response):
         tokens, cache_creation, cache_read = response_usage(response)
         usage["tokens"] += tokens
         usage["cache_creation"] += cache_creation
         usage["cache_read"] += cache_read
+        if debug:
+            contagem = {}
+            for bloco in response.content:
+                tipo = getattr(bloco, "type", None)
+                chave = f"{tipo}:{getattr(bloco, 'name', '')}" if tipo else "?"
+                contagem[chave] = contagem.get(chave, 0) + 1
+            print(
+                f"  [debug] EAN {ean}: stop_reason={response.stop_reason} "
+                f"tokens_chamada={tokens} blocos={contagem}",
+                file=sys.stderr,
+            )
 
     for attempt in range(1, max_retries + 1):
         try:
@@ -1452,6 +1509,12 @@ def call_model(
                 )
                 track(response)
                 resume_count += 1
+            if debug:
+                print(
+                    f"  [debug] EAN {ean}: tentativa {attempt} fechou com "
+                    f"resume_count={resume_count} tokens_acumulados={usage['tokens']}",
+                    file=sys.stderr,
+                )
 
             if response.stop_reason == "refusal":
                 return None, usage
@@ -1463,16 +1526,18 @@ def call_model(
             try:
                 data = extract_json(final_text)
             except json.JSONDecodeError:
-                # JSON malformado pode ser um erro pontual do modelo, não só
-                # falha de API - antes desistia na hora (sem retry nenhum);
-                # agora tenta de novo como as outras falhas transitórias,
-                # só desistindo de vez se esgotar max_retries.
                 print(
                     f"  [aviso] resposta não é JSON válido para EAN {ean} "
                     f"(tentativa {attempt}/{max_retries}): {final_text[:200]!r}",
                     file=sys.stderr,
                 )
-                if attempt == max_retries:
+                # sem "{" nenhum, o texto é o modelo explicando em prosa por
+                # que não achou o produto (recusa semântica) - não um JSON
+                # malformado por erro pontual. Repetir do zero (nova busca
+                # completa) não muda esse julgamento, só queima token à toa -
+                # desiste na hora. Com "{" presente, ainda pode ser um erro
+                # transitório de formatação, aí vale tentar de novo.
+                if "{" not in final_text or attempt == max_retries:
                     return None, usage
                 messages = [{"role": "user", "content": user_message}]
                 time.sleep(min(2 ** attempt, 30))

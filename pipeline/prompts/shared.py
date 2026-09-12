@@ -50,3 +50,9 @@ subcategoria da árvore descrever o produto, use null nos três campos.
 
 Responda APENAS com JSON válido, sem markdown: {"titulo": str|null, "descricao_curta": str|null, \
 "departamento": str|null, "categoria": str|null, "subcategoria": str|null}."""
+
+# saída quando departamento/categoria/subcategoria já vieram do de-para
+# humano — mesmas regras de título/descrição, sem árvore no prompt
+FORMAT_SAIDA_TITULO_DESCRICAO = """
+Responda APENAS com JSON válido, sem markdown: {"titulo": str|null, "descricao_curta": str|null}. \
+Não devolva departamento, categoria nem subcategoria."""

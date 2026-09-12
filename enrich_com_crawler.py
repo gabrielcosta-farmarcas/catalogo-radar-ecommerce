@@ -491,6 +491,7 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
         categoria_bruta=categoria_bruta,
         descricao_bruta=descricao_bruta,
         fabricante=medicamento["laboratorio"],
+        categoria_ja_mapeada=categoria_mapeada is not None,
     )
     usage["tokens"] += usage_fmt["tokens"]
     usage["cache_creation"] += usage_fmt["cache_creation"]
@@ -777,6 +778,7 @@ def mapear_tarjados_para_schema(item, ean, client, model, verify_tarja=True):
         categoria_bruta=categoria_bruta,
         descricao_bruta=descricao_bruta,
         fabricante=fabricante,
+        categoria_ja_mapeada=categoria_mapeada is not None,
     )
     usage["tokens"] += usage_fmt["tokens"]
     usage["cache_creation"] += usage_fmt["cache_creation"]
@@ -966,6 +968,7 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
         categoria_bruta=categoria_bruta,
         descricao_bruta=descricao_bruta,
         fabricante=fabricante,
+        categoria_ja_mapeada=categoria_mapeada is not None,
     )
     usage["tokens"] += usage_fmt["tokens"]
     usage["cache_creation"] += usage_fmt["cache_creation"]

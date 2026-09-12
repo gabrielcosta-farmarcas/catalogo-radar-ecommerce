@@ -4,7 +4,12 @@ Nenhuma regra nova. Few-shots de não-medicamento (Hipoglós, fralda, etc.)
 não entram aqui de propósito: pertencem ao pack NMED.
 """
 
-from pipeline.prompts.shared import FORMAT_CATEGORIZACAO, FORMAT_DESCRICAO, FORMAT_INTRO
+from pipeline.prompts.shared import (
+    FORMAT_CATEGORIZACAO,
+    FORMAT_DESCRICAO,
+    FORMAT_INTRO,
+    FORMAT_SAIDA_TITULO_DESCRICAO,
+)
 
 FORMAT_TITULO_MEDICAMENTO = """
 REGRAS DE TÍTULO (sem hífens, até ~70 caracteres - é o que o cliente digita/lê na busca), sem \
@@ -51,4 +56,11 @@ FORMAT_CAMPOS_SYSTEM = (
     + FORMAT_TITULO_MEDICAMENTO
     + FORMAT_DESCRICAO
     + FORMAT_CATEGORIZACAO
+)
+
+FORMAT_CAMPOS_SEM_CATEGORIA = (
+    FORMAT_INTRO
+    + FORMAT_TITULO_MEDICAMENTO
+    + FORMAT_DESCRICAO
+    + FORMAT_SAIDA_TITULO_DESCRICAO
 )

@@ -7,7 +7,7 @@ from dominios import (
     eh_verdadeiro,
     origem_codigo,
 )
-from pipeline.prompts.medicamento import FORMAT_CAMPOS_SYSTEM
+from pipeline.prompts.medicamento import FORMAT_CAMPOS_SEM_CATEGORIA, FORMAT_CAMPOS_SYSTEM
 from pipeline.safety.frases import resolver_retencao
 from pipeline.safety.titulo import corrigir_sal_titulo
 
@@ -24,6 +24,9 @@ class MedicamentoPolicy:
 
     def format_system_template(self) -> str:
         return FORMAT_CAMPOS_SYSTEM
+
+    def format_system_template_sem_categorizacao(self) -> str:
+        return FORMAT_CAMPOS_SEM_CATEGORIA
 
     def apply_invariants(self, data: dict, ean: str) -> None:
         import dominios
