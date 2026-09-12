@@ -200,6 +200,91 @@ def carregar_eans(caminho_xlsx):
     print(f"{inseridos} EAN(s) novo(s) inserido(s) de {len(df)} no arquivo.")
 
 
+def carregar_lote_ecommerce(caminho_xlsx, col_ean="EAN", col_nome="name"):
+    """
+    Le um lote do e-commerce (colunas EAN, name) e:
+      - EAN novo: insere (ean, nome_produto), fase_atual fica 'pendente' (default).
+      - EAN ja cadastrado: guarda o estado atual em produtos_historico e reseta
+        o produto pra fila de enriquecimento - so ficam nome_produto, ean e
+        fase_atual='pendente', todo o resto do enriquecimento anterior e limpo.
+    """
+    df = pd.read_excel(caminho_xlsx)
+    with conectar() as conn:
+        with conn.cursor() as cur:
+            inseridos = 0
+            resetados = 0
+            for _, row in df.iterrows():
+                ean = str(row[col_ean]).strip()
+                nome = str(row[col_nome] or "").strip()
+                if nome.lower() == "nan":
+                    nome = ""
+
+                cur.execute(
+                    """
+                    INSERT INTO produtos (ean, nome_produto)
+                    VALUES (%s, %s)
+                    ON CONFLICT (ean) DO NOTHING
+                    """,
+                    (ean, nome),
+                )
+                if cur.rowcount:
+                    inseridos += 1
+                    continue
+
+                cur.execute(
+                    """
+                    INSERT INTO produtos_historico (produto_id, ean, dados)
+                    SELECT id, ean, to_jsonb(produtos.*)
+                    FROM produtos WHERE ean = %s
+                    """,
+                    (ean,),
+                )
+                cur.execute(
+                    """
+                    UPDATE produtos SET
+                        nome_produto = %s,
+                        ean = %s,
+                        titulo = NULL,
+                        marca = NULL,
+                        fabricante = NULL,
+                        tipo_produto = NULL,
+                        registro_ms = NULL,
+                        generico = NULL,
+                        tarja = NULL,
+                        precisa_retencao_receita = NULL,
+                        principios_ativos = NULL,
+                        descricao_curta = NULL,
+                        frase_obrigatoria = NULL,
+                        categoria_id = NULL,
+                        origem_categorizacao = NULL,
+                        imagem_url = NULL,
+                        pagina_produto_url = NULL,
+                        preco_pesquisado = NULL,
+                        data_pesquisa = NULL,
+                        origem_enriquecimento = NULL,
+                        origem_referencia = NULL,
+                        confirmado_anvisa_cmed = false,
+                        precisa_validacao_humana = false,
+                        mensagem_validacao_humana = NULL,
+                        fase_atual = 'pendente',
+                        modelo = NULL,
+                        tokens_utilizados = 0,
+                        tokens_cache_gravados = 0,
+                        tokens_cache_lidos = 0,
+                        atualizado_em = now()
+                    WHERE ean = %s
+                    """,
+                    (nome, ean, ean),
+                )
+                resetados += cur.rowcount
+        conn.commit()
+    print(
+        f"{inseridos} EAN(s) novo(s) inserido(s), {resetados} ja cadastrado(s) "
+        f"resetado(s) pra 'pendente' (historico anterior preservado em "
+        f"produtos_historico), de {len(df)} no arquivo."
+    )
+
+
 def contar_por_fase():
     with conectar() as conn:
         with conn.cursor() as cur:
@@ -221,6 +306,14 @@ def main():
     p_carregar = sub.add_parser("carregar-eans", help="Carrega EANs de um xlsx pra tabela produtos")
     p_carregar.add_argument("arquivo", help="Caminho do xlsx (colunas EAN, Nome do produto)")
 
+    p_lote = sub.add_parser(
+        "carregar-lote",
+        help="Carrega um lote do e-commerce (colunas EAN, name); reseta pra 'pendente' os EANs ja cadastrados",
+    )
+    p_lote.add_argument("arquivo", help="Caminho do xlsx (colunas EAN, name)")
+    p_lote.add_argument("--col-ean", default="EAN")
+    p_lote.add_argument("--col-nome", default="name")
+
     sub.add_parser("status", help="Mostra quantos produtos estao em cada fase")
 
     args = parser.parse_args()
@@ -229,6 +322,8 @@ def main():
         criar_tabelas()
     elif args.comando == "carregar-eans":
         carregar_eans(args.arquivo)
+    elif args.comando == "carregar-lote":
+        carregar_lote_ecommerce(args.arquivo, col_ean=args.col_ean, col_nome=args.col_nome)
     elif args.comando == "status":
         contar_por_fase()
 
