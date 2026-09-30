@@ -26,19 +26,9 @@ class NaoMedicamentoPolicy:
         if data.get("generico"):
             data["generico"] = None
 
-        if data.get("imagem_url"):
-            from enrich_produtos import check_imagem_tamanho_minimo
+        from pipeline.policies.base import validar_imagem_minima
 
-            ok, motivo, conteudo = check_imagem_tamanho_minimo(data["imagem_url"])
-            if not ok:
-                print(
-                    f"  [aviso] imagem descartada para EAN {ean} ({motivo}): "
-                    f"{data['imagem_url']}"
-                )
-                data["imagem_url"] = None
-                data.pop("_imagem_bytes", None)
-            elif conteudo:
-                data["_imagem_bytes"] = conteudo
+        validar_imagem_minima(data, ean)
 
     def apply_title_checks(self, data: dict, ean: str) -> None:
         titulo = data.get("titulo") or ""

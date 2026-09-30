@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import difflib
 import re
 
 REGISTRO_MS_PLACEHOLDERS = {
@@ -24,38 +23,21 @@ def registro_ms_valido(valor):
     return valor
 
 
-def nomes_concordam(nomes):
-    """True se pelo menos 2 nomes batem (um contém o outro ou similaridade
-    de sequência >= 0.55). Nomes demais divergentes = outro produto."""
-    chaves = []
-    for nome in nomes:
-        chave = re.sub(r"\s+", " ", (nome or "")).strip().upper()
-        if chave:
-            chaves.append(chave)
-    if len(chaves) < 2:
-        return False
-    base = chaves[0]
-    for outro in chaves[1:]:
-        if base in outro or outro in base:
-            continue
-        if difflib.SequenceMatcher(None, base, outro).ratio() < 0.55:
-            return False
-    return True
-
-
 def eh_confiavel(resultado, fontes):
     """
     Medicamento: exige registro_ms ou princípio_ativo (campos que só site com
     ficha técnica farmacêutica de verdade expõe). Não-medicamento nunca tem
     esses campos, então usa como sinal de confiança 2+ sites com EAN
-    conferido E nomes parecidos.
+    conferido - ean_conferido já é o próprio site confirmando, na ficha do
+    produto, que aquele EAN é dele (ver adapters em crawler/adapters/*.py),
+    não uma busca aproximada, então o EAN batendo em 2+ fontes independentes
+    é o sinal - o nome pode variar entre varejistas (apelido comercial,
+    reordenação) sem indicar produto errado.
     """
     if any(resultado.get(c) for c in CAMPOS_CONFIANCA):
         return True
     conferidos = resultado.get("_fontes_ean_conferido") or []
-    if len(conferidos) < FONTES_MINIMAS_SEM_CAMPOS_REGULATORIOS:
-        return False
-    return nomes_concordam(resultado.get("_nomes") or [])
+    return len(conferidos) >= FONTES_MINIMAS_SEM_CAMPOS_REGULATORIOS
 
 
 def indica_medicamento(resultado):

@@ -1278,8 +1278,11 @@ ESQUEMAS_URL_PERMITIDOS = {"http", "https"}
 IMAGEM_REDIRECTS_MAX = 3
 HOSTS_IMAGEM_BLOQUEADOS = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
 
-# fotos aceitas no enriquecimento — um JPEG por EAN, na raiz do projeto
+# fotos aceitas no enriquecimento — um JPEG por EAN, separadas por
+# medicamento/não-medicamento pra facilitar a análise
 DIRETORIO_IMAGENS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "imagens")
+DIRETORIO_IMAGENS_MEDICAMENTOS = os.path.join(DIRETORIO_IMAGENS, "medicamentos")
+DIRETORIO_IMAGENS_NAO_MEDICAMENTOS = os.path.join(DIRETORIO_IMAGENS, "nao-medicamentos")
 
 
 def _host_imagem_publico(hostname):
@@ -1383,10 +1386,12 @@ def check_imagem_tamanho_minimo(
         return False, f"não foi possível validar a imagem ({exc})", None
 
 
-def salvar_imagem_local(ean, image_url, conteudo=None):
+def salvar_imagem_local(ean, image_url, conteudo=None, medicamento=False):
     """
-    Grava a foto do produto em imagens/{ean}.jpg. Converte para JPEG mesmo
-    se a origem for png/webp. Falha de download não derruba o cadastro.
+    Grava a foto do produto em imagens/medicamentos/{ean}.jpg ou
+    imagens/nao-medicamentos/{ean}.jpg, conforme `medicamento` - separado
+    para facilitar a análise. Converte para JPEG mesmo se a origem for
+    png/webp. Falha de download não derruba o cadastro.
     Retorna o caminho gravado ou None.
     """
     ean_arquivo = re.sub(r"\D", "", str(ean or ""))
@@ -1399,9 +1404,10 @@ def salvar_imagem_local(ean, image_url, conteudo=None):
         if conteudo is None:
             print(f"  [aviso] não gravou imagem local para EAN {ean_arquivo} ({motivo})")
             return None
+    diretorio = DIRETORIO_IMAGENS_MEDICAMENTOS if medicamento else DIRETORIO_IMAGENS_NAO_MEDICAMENTOS
     try:
-        os.makedirs(DIRETORIO_IMAGENS, exist_ok=True)
-        destino = os.path.join(DIRETORIO_IMAGENS, f"{ean_arquivo}.jpg")
+        os.makedirs(diretorio, exist_ok=True)
+        destino = os.path.join(diretorio, f"{ean_arquivo}.jpg")
         with Image.open(io.BytesIO(conteudo)) as img:
             if img.mode in ("RGBA", "LA", "P"):
                 fundo = Image.new("RGB", img.size, (255, 255, 255))
@@ -1622,20 +1628,6 @@ def call_model(
                     data, data.get("tarja"), True
                 )
 
-                # medicamento nunca leva imagem - reforço depois da
-                # verificação de tarja, caso algum caminho ainda tenha
-                # preenchido imagem_url.
-                if (
-                    eh_medicamento(data)
-                    and data.get("imagem_url")
-                ):
-                    print(
-                        f"  [info] imagem removida para EAN {ean} "
-                        f"(medicamento): {data['imagem_url']}"
-                    )
-                    data["imagem_url"] = None
-                    data.pop("_imagem_bytes", None)
-
             if verify_images and data.get("imagem_url"):
                 ok, verify_tokens = verify_image(
                     client,
@@ -1786,6 +1778,7 @@ def salvar_resultado(conn, ean, data, usage=None, nome_produto=None):
             ean,
             data["imagem_url"],
             conteudo=data.pop("_imagem_bytes", None),
+            medicamento=eh_medicamento(data),
         )
 
 

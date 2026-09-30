@@ -31,7 +31,7 @@ def _med(**kwargs):
         "pagina_produto_url": None,
         "tarja": TARJA_SEM,
         "principios_ativos": "Dipirona 1g",
-        "imagem_url": "https://exemplo.com/foto.jpg",
+        "imagem_url": None,
     }
     data.update(kwargs)
     return data
@@ -64,9 +64,30 @@ def test_midazolam_corrige_sal_no_titulo():
     assert "Cloridrato" not in data["titulo"]
 
 
-def test_medicamento_remove_imagem():
-    data = apply_safety_checks(_med(), "789")
+def test_medicamento_mantem_imagem_valida(monkeypatch):
+    import enrich_produtos
+
+    monkeypatch.setattr(
+        enrich_produtos,
+        "check_imagem_tamanho_minimo",
+        lambda url, **kwargs: (True, "600x600px", b"fake-jpeg-bytes"),
+    )
+    data = apply_safety_checks(_med(imagem_url="https://exemplo.com/foto.jpg"), "789")
+    assert data["imagem_url"] == "https://exemplo.com/foto.jpg"
+    assert data["_imagem_bytes"] == b"fake-jpeg-bytes"
+
+
+def test_medicamento_descarta_imagem_pequena_demais(monkeypatch):
+    import enrich_produtos
+
+    monkeypatch.setattr(
+        enrich_produtos,
+        "check_imagem_tamanho_minimo",
+        lambda url, **kwargs: (False, "100x100px (mínimo exigido: 300x300px)", None),
+    )
+    data = apply_safety_checks(_med(imagem_url="https://exemplo.com/foto.jpg"), "789")
     assert data["imagem_url"] is None
+    assert "_imagem_bytes" not in data
 
 
 def test_nao_medicamento_carimba_tarja_e_tira_ms():
