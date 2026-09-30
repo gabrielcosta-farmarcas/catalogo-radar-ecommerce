@@ -177,7 +177,6 @@ from pipeline.classify import (
     REGISTRO_MS_PLACEHOLDERS,
     eh_confiavel,
     indica_medicamento as _indica_medicamento,
-    nomes_concordam as _nomes_concordam,
     registro_ms_valido as _registro_ms_valido,
 )
 
@@ -186,7 +185,6 @@ def _consolidar_resultados(ean, brutos):
     """Aplica adapters na ORDEM de prioridade (não na ordem de chegada)."""
     resultado = {
         "ean": ean,
-        "_nomes": [],
         "_fontes_ean_conferido": [],
         "_tarja_fonte": None,
     }
@@ -215,8 +213,6 @@ def _consolidar_resultados(ean, brutos):
                 resultado[campo] = valor
         if getattr(r, "ean_conferido", False):
             resultado["_fontes_ean_conferido"].append(adapter.name)
-            if r.name:
-                resultado["_nomes"].append(r.name)
         if achou_campo:
             fontes.append(adapter.name)
     resultado["ms_register"] = _registro_ms_valido(resultado.get("ms_register"))
@@ -345,7 +341,7 @@ def mapear_para_schema(resultado, fontes, client, model):
         "subcategoria": formatados.get("subcategoria"),
         "categoria_id": None,
         "origem_categorizacao": "ia",  # crawler não tem de-para ainda
-        "imagem_url": None if tipo_cadastro == TIPO_MEDICAMENTO else resultado.get("image1"),
+        "imagem_url": resultado.get("image1"),
         "pagina_produto_url": resultado.get("url"),
         # mesmo quando o crawler acha o produto, título/categoria/descrição
         # ainda passam por uma chamada ao Claude (sem busca) - o rótulo deixa
@@ -525,8 +521,7 @@ def mapear_cmed_para_schema(medicamento, ean, client, model):
         "subcategoria": categoria_mapeada["subcategoria"] if categoria_mapeada else formatados.get("subcategoria"),
         "categoria_id": categoria_mapeada["categoria_id"] if categoria_mapeada else None,
         "origem_categorizacao": "mapeamento_cmed" if categoria_mapeada else "ia",
-        # medicamento nunca leva imagem (apply_safety_checks reforça).
-        "imagem_url": None,
+        "imagem_url": resultado_crawler.get("image1"),
         "pagina_produto_url": None,
         "origem_enriquecimento": ORIGEM_ANVISA_CMED,
         "origem_referencia": medicamento["ggrem"],
@@ -650,8 +645,7 @@ def mapear_abcfarma_para_schema(medicamento, ean, client, model, verify_tarja=Tr
         "subcategoria": formatados.get("subcategoria"),
         "categoria_id": None,
         "origem_categorizacao": "ia",  # ABCFarma não tem de-para ainda
-        # medicamento nunca leva imagem (apply_safety_checks reforça).
-        "imagem_url": None,
+        "imagem_url": resultado_crawler.get("image1"),
         "pagina_produto_url": pagina_produto_url,
         "origem_enriquecimento": ORIGEM_ABCFARMA,
         "origem_referencia": medicamento["codigo_produto"],
@@ -811,9 +805,7 @@ def mapear_tarjados_para_schema(item, ean, client, model, verify_tarja=True):
         "subcategoria": categoria_mapeada["subcategoria"] if categoria_mapeada else formatados.get("subcategoria"),
         "categoria_id": categoria_mapeada["categoria_id"] if categoria_mapeada else None,
         "origem_categorizacao": "mapeamento_tarjado" if categoria_mapeada else "ia",
-        # base não tem coluna de imagem - crawler só preenche foto de
-        # não-medicamento, mesma regra de negócio da IQVIA.
-        "imagem_url": None if eh_medicamento_final else resultado_crawler.get("image1"),
+        "imagem_url": resultado_crawler.get("image1"),
         "pagina_produto_url": pagina_produto_url,
         "origem_enriquecimento": ORIGEM_TARJADOS,
         "origem_referencia": ean,
@@ -1001,9 +993,7 @@ def mapear_iqvia_para_schema(produto, ean, client, model, verify_tarja=True):
         "subcategoria": categoria_mapeada["subcategoria"] if categoria_mapeada else formatados.get("subcategoria"),
         "categoria_id": categoria_mapeada["categoria_id"] if categoria_mapeada else None,
         "origem_categorizacao": "mapeamento_iqvia" if categoria_mapeada else "ia",
-        # IQVIA não tem coluna de imagem - crawler só preenche foto de
-        # não-medicamento. Medicamento sai sem imagem (regra de negócio).
-        "imagem_url": None if eh_medicamento else resultado_crawler.get("image1"),
+        "imagem_url": resultado_crawler.get("image1"),
         "pagina_produto_url": pagina_produto_url,
         "origem_enriquecimento": ORIGEM_IQVIA,
         "origem_referencia": produto["fcc"],

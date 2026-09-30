@@ -22,17 +22,19 @@ def test_indica_medicamento_por_breadcrumb_nao_por_descricao():
 
 
 def test_eh_confiavel_uma_fonte_sem_ms_nao_fecha():
-    resultado = {
-        "_fontes_ean_conferido": ["araujo"],
-        "_nomes": ["Fralda Pampers XXG"],
-    }
+    resultado = {"_fontes_ean_conferido": ["araujo"]}
     assert eh_confiavel(resultado, ["araujo"]) is False
 
 
-def test_eh_confiavel_duas_fontes_com_nomes():
+def test_eh_confiavel_duas_fontes_bastam_mesmo_com_nomes_diferentes():
+    # ean_conferido já é o site confirmando o EAN na ficha do produto - o
+    # nome pode variar entre varejistas (apelido comercial, reordenação) sem
+    # que isso signifique produto errado (ver EAN 3253582051060: Drogasil/
+    # Drogaraia "Fascinio L'occitane..." x Época "Perfume Ninfa Das
+    # Águas Fascínio...").
     resultado = {
         "_fontes_ean_conferido": ["panvel", "pacheco"],
-        "_nomes": ["Fralda Pampers Confort Sec XXG", "Pampers Confort Sec XXG"],
+        "_nomes": ["Fralda Pampers Confort Sec XXG", "Kit Higiene Infantil Pampers"],
     }
     assert eh_confiavel(resultado, ["panvel", "pacheco"]) is True
 

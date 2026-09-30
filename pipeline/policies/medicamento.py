@@ -58,12 +58,9 @@ class MedicamentoPolicy:
             tarja, data.get("principios_ativos")
         )
 
-        if data.get("imagem_url"):
-            print(
-                f"  [info] imagem removida para EAN {ean} (medicamento): "
-                f"{data['imagem_url']}"
-            )
-            data["imagem_url"] = None
+        from pipeline.policies.base import validar_imagem_minima
+
+        validar_imagem_minima(data, ean)
 
     def apply_title_checks(self, data: dict, ean: str) -> None:
         corrigir_sal_titulo(data, ean)
