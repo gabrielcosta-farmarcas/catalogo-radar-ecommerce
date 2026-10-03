@@ -1,7 +1,9 @@
 # Deploy no Coolify
 
-A API (FastAPI) e o Postgres sobem no Coolify. O pipeline em lote (`enrich_com_crawler.py`,
-`db.py carregar-lote`) roda pelo terminal do container da aplicação no Coolify (ver passo 5).
+O Postgres e um container de aplicação sobem no Coolify. **Modo terminal:** o container não serve HTTP
+(`CMD ["sleep", "infinity"]` no Dockerfile, sem domínio, sem porta publicada); o pipeline em lote
+(`enrich_com_crawler.py`, `db.py carregar-lote`) roda pelo terminal do container (ver passo 5).
+Para voltar a expor a API, veja o comentário no fim do `Dockerfile`.
 
 ## 1. Postgres gerenciado
 1. No Coolify: **New Resource → Database → PostgreSQL 16**. Defina usuário `cadastro`, senha e banco `cadastro_produtos`.
@@ -53,10 +55,12 @@ No Coolify o banco criado usa, por padrão, usuário `postgres` e banco `postgre
 - **Arquitetura:** o build acontece no servidor do Coolify (amd64 em geral); o Dockerfile não depende da arquitetura.
 
 ## 4. Verificação
+No terminal da aplicação (não há domínio nem `/health` HTTP no modo terminal):
 ```bash
-curl https://<dominio>/health   # {"ok":true,"postgres":true,"anthropic_key":true,...}
+python db.py status
+python -c "import anthropic;print(anthropic.__version__)"   # 0.121.0
 ```
-`/docs` abre o Swagger.
+De fora, nada deve responder: sem domínio na aplicação e *Public access* do banco em Private.
 
 ## 5. Rodar o pipeline pelo terminal do Coolify
 Na aplicação: **Terminal** (ou `docker exec -it <container-app> bash` no servidor). O container já tem o

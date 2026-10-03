@@ -17,13 +17,11 @@ COPY . .
 # engole o erro de escrita, então com usuário sem permissão as fotos sumiriam em silêncio.
 VOLUME ["/app/imagens"]
 
-EXPOSE 8000
-
-# liveness apenas: /health responde 200 mesmo com o Postgres fora (ok=false no corpo),
-# então uma queda do banco não reinicia a API em loop.
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=4).status == 200 else 1)"
-
-# 1 worker de propósito: o estado dos jobs de enriquecimento fica em memória (app/jobs.py)
-# e o polling de /jobs/{id} precisa cair no mesmo processo que criou o job.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# Modo terminal: nenhum processo escuta porta (a API HTTP não tem autenticação e o endpoint
+# /enriquecer gasta token da Anthropic). O container só fica de pé para o terminal do Coolify
+# rodar os scripts (db.py, enrich_com_crawler.py, carregar_*.py). Sem EXPOSE e sem healthcheck HTTP.
+# Para voltar a servir a API, troque o CMD abaixo por:
+#   CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
+# (1 worker: o estado dos jobs fica em memória, app/jobs.py) e restaure o HEALTHCHECK em /health.
+HEALTHCHECK NONE
+CMD ["sleep", "infinity"]
