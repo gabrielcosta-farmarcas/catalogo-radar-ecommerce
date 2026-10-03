@@ -12,3 +12,4 @@ imagens/**/*.jpeg
 imagens/**/*.png
 imagens/**/*.webp
 produtos_exportados.xlsx
+dumps/
