@@ -113,6 +113,7 @@ CREATE TABLE IF NOT EXISTS produtos (
     categoria_id            BIGINT REFERENCES categorias(id),
     origem_categorizacao    origem_categorizacao,
     imagem_url              TEXT,
+    imagem_drive_url        TEXT,
     pagina_produto_url      TEXT,
     preco_pesquisado        TEXT,
     data_pesquisa           DATE,
@@ -132,6 +133,9 @@ CREATE TABLE IF NOT EXISTS produtos (
     criado_em               TIMESTAMPTZ NOT NULL DEFAULT now(),
     atualizado_em           TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- bancos criados antes da coluna (CREATE TABLE IF NOT EXISTS não altera tabela existente)
+ALTER TABLE produtos ADD COLUMN IF NOT EXISTS imagem_drive_url TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_produtos_fase ON produtos (fase_atual);
 CREATE INDEX IF NOT EXISTS idx_produtos_categoria_id ON produtos (categoria_id);
@@ -258,6 +262,7 @@ def carregar_lote_ecommerce(caminho_xlsx, col_ean="EAN", col_nome="name"):
                         categoria_id = NULL,
                         origem_categorizacao = NULL,
                         imagem_url = NULL,
+                        imagem_drive_url = NULL,
                         pagina_produto_url = NULL,
                         preco_pesquisado = NULL,
                         data_pesquisa = NULL,

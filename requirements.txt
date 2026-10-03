@@ -12,3 +12,6 @@ requests
 pyopenssl
 pypdf
 pytest
+google-api-python-client==2.198.0
+google-auth==2.50.0
+google-auth-httplib2==0.3.1

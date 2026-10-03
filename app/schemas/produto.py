@@ -30,6 +30,7 @@ class CadastroProduto(BaseModel):
     subcategoria: Optional[str] = None
     origem_categorizacao: Optional[OrigemCategorizacao] = None
     imagem_url: Optional[str] = None
+    imagem_drive_url: Optional[str] = None
     pagina_produto_url: Optional[str] = None
     preco_pesquisado: Optional[str] = None
     data_pesquisa: Optional[date] = None

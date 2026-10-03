@@ -37,6 +37,7 @@ from PIL import Image, UnidentifiedImageError
 
 import categorias
 import dominios
+import drive
 import substancias_controladas
 from dominios import (
     ORIGEM_ABCFARMA,
@@ -1774,12 +1775,29 @@ def salvar_resultado(conn, ean, data, usage=None, nome_produto=None):
         registrar_versao_historico(cur, produto_id, ean, "concluido", data, usage)
     conn.commit()
     if data.get("imagem_url"):
-        salvar_imagem_local(
+        medicamento = eh_medicamento(data)
+        destino = salvar_imagem_local(
             ean,
             data["imagem_url"],
             conteudo=data.pop("_imagem_bytes", None),
-            medicamento=eh_medicamento(data),
+            medicamento=medicamento,
         )
+        if destino:
+            enviar_imagem_drive(conn, ean, destino, medicamento)
+
+
+def enviar_imagem_drive(conn, ean, caminho, medicamento):
+    """Sobe a foto gravada para o Google Drive (se configurado) e guarda o link em
+    produtos.imagem_drive_url. Falha aqui não afeta o cadastro, que já foi comitado."""
+    if not drive.configurado():
+        return None
+    link = drive.enviar_imagem(caminho, ean, medicamento=medicamento)
+    if link:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE produtos SET imagem_drive_url = %s WHERE ean = %s", (link, ean))
+        conn.commit()
+        print(f"  [info] imagem enviada ao Drive: {link}")
+    return link
 
 
 def registrar_versao_historico(cur, produto_id, ean, fase_resultado, data, usage):

@@ -74,3 +74,21 @@ python enrich_com_crawler.py --help
 - O terminal do Coolify cai se a aba fechar. Para execuções longas use `nohup ... > /app/imagens/pipeline.log 2>&1 &`
   ou `tmux`/`screen` (instale no container se precisar).
 - O enriquecimento grava fotos em `/app/imagens`, o volume persistente do passo 3.
+
+## 6. Fotos no Google Drive (opcional)
+O enriquecimento grava a foto em `/app/imagens` e, se o Drive estiver configurado, sobe para
+`{pasta raiz}/medicamentos|nao-medicamentos/{ean}.jpg` e guarda o link em `produtos.imagem_drive_url`.
+Falha de upload só avisa no log; o cadastro não é afetado.
+
+1. **Google Cloud:** crie uma *service account*, ative a **Google Drive API** e gere uma chave JSON.
+2. **Drive:** crie a pasta raiz e compartilhe com o e-mail da service account (`...@...iam.gserviceaccount.com`) como **Editor**
+   (ou use um Drive compartilhado em que ela seja membro; service account não tem cota própria).
+3. **Coolify → variáveis da aplicação** (marque como runtime only):
+   - `GOOGLE_SERVICE_ACCOUNT_JSON` = conteúdo da chave JSON em **uma linha**
+   - `DRIVE_FOLDER_ID` = trecho final da URL da pasta (`drive.google.com/drive/folders/<ID>`)
+4. Redeploy, depois no terminal da aplicação:
+```bash
+python db.py criar-tabelas          # adiciona a coluna imagem_drive_url (idempotente)
+python enviar_imagens_drive.py      # sobe as fotos que já estão no volume
+```
+Daí em diante cada enriquecimento já envia a foto. `python enviar_imagens_drive.py` também recupera envios que falharam.
